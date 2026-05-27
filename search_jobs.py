@@ -126,29 +126,84 @@ def get_source_weight(url: str, title: str) -> float:
     source_type = identify_source(url, title)
     return SOURCE_WEIGHTS.get(source_type, 0.5)
 
-# 风险标签系统：识别真实风险信号
-RISK_PATTERNS = [
-    (r'加班[严很]|996|大小周|强制加班|无偿加班', "加班严重"),
-    (r'看[组部]|组[长导]决定|运气成分', "看组"),
-    (r'PUA|精神控制|打压|贬低|否定', "leader PUA"),
-    (r'裁员|优化|毕业|人员调整|缩编', "裁员风险"),
-    (r'晋升[慢难]|天花板|晋升无望|晋升周期长', "晋升慢"),
-    (r'HC[冻停]|暂停招聘|无HC|没有HC', "HC冻结"),
-    (r'拖欠工资|欠薪|延迟发放', "薪资风险"),
-    (r'内卷|恶性竞争|抢功|甩锅', "内卷严重"),
-    (r'管理混乱|朝令夕改|目标不清', "管理混乱"),
-    (r'技术[落后旧]|维护老代码|没有技术含量', "技术落后"),
-]
+# 风险标签系统：6个核心维度
+RISK_DIMENSIONS = {
+    "WLB": [
+        r'加班[严很]|996|大小周|强制加班|无偿加班',
+        r'高强度|节奏快|push|高压',
+        r'通宵|凌晨|周末[加值]',
+        r'不加班|双休|准时下班|弹性',  # 正面信号（用于冲突检测）
+    ],
+    "管理风险": [
+        r'PUA|精神控制|打压|贬低|否定',
+        r'管理混乱|朝令夕改|目标不清',
+        r'看[组部]|组[长导]决定|运气成分',
+        r'leader|主管|领导',
+    ],
+    "成长性": [
+        r'晋升[慢难]|天花板|晋升无望|晋升周期长',
+        r'没有成长|学不到东西|技术[落后旧]',
+        r'维护老代码|没有技术含量|CRUD',
+        r'增长[强劲快]|高速发展|晋升[快空间]',  # 正面信号
+    ],
+    "稳定性": [
+        r'裁员|优化|毕业|人员调整|缩编',
+        r'HC[冻停]|暂停招聘|无HC|没有HC',
+        r'倒闭|欠薪|拖欠|爆雷|收缩',
+        r'不裁员|稳定|上市|国企',  # 正面信号
+    ],
+    "薪资": [
+        r'拖欠工资|欠薪|延迟发放|薪资低',
+        r'薪资[少低]|工资[少低]|待遇差',
+        r'薪资[高有竞]|工资[高]|待遇好',  # 正面信号
+    ],
+    "面试难度": [
+        r'面试[难很]|笔试[难很]|hard|手撕',
+        r'面试[简单]|笔试[简单]|免笔试|不考算法',
+    ],
+}
 
-def extract_risk_tags(text: str) -> list[str]:
-    """从文本中提取风险标签"""
-    tags = []
+# 风险标签中文名
+RISK_LABELS = {
+    "WLB": "WLB风险",
+    "管理风险": "管理风险",
+    "成长性": "成长风险",
+    "稳定性": "稳定风险",
+    "薪资": "薪资风险",
+    "面试难度": "面试难度",
+}
+
+def extract_risk_tags(text: str) -> list[dict]:
+    """从文本中提取风险标签，返回带证据数量的风险列表"""
     text_lower = text.lower()
-    for pattern, tag in RISK_PATTERNS:
-        if re.search(pattern, text_lower):
-            if tag not in tags:
-                tags.append(tag)
-    return tags
+    risk_results = []
+    
+    for dimension, patterns in RISK_DIMENSIONS.items():
+        # 分离正面和负面模式（最后一个通常是正面）
+        negative_patterns = patterns[:-1] if len(patterns) > 1 else patterns
+        positive_patterns = [patterns[-1]] if len(patterns) > 1 else []
+        
+        # 统计负面命中
+        negative_hits = 0
+        for pat in negative_patterns:
+            negative_hits += len(re.findall(pat, text_lower))
+        
+        # 统计正面命中
+        positive_hits = 0
+        for pat in positive_patterns:
+            positive_hits += len(re.findall(pat, text_lower))
+        
+        # 如果有负面命中，加入风险列表
+        if negative_hits > 0:
+            risk_results.append({
+                "dimension": dimension,
+                "label": RISK_LABELS.get(dimension, dimension),
+                "evidence_count": negative_hits,
+                "positive_count": positive_hits,
+                "controversial": negative_hits > 0 and positive_hits > 0,
+            })
+    
+    return risk_results
 
 def calculate_confidence(results: list, sentiment: dict) -> float:
     """计算分析置信度（0-1）
@@ -336,9 +391,18 @@ def analyze_sentiment(snippets: list) -> dict:
     result["perks"] = perks_score
     result["tags"].extend(perks_tags)
 
-    # 提取风险标签
-    risk_tags = extract_risk_tags(all_text)
-    result["risk_tags"] = risk_tags
+    # 提取风险标签（带证据数量和冲突检测）
+    risk_results = extract_risk_tags(all_text)
+    result["risk_tags"] = [r["label"] for r in risk_results]
+    result["risk_details"] = risk_results
+    
+    # 冲突检测：如果有多个维度存在正反评价，标记为 controversial
+    controversial_dims = [r["dimension"] for r in risk_results if r.get("controversial")]
+    if len(controversial_dims) >= 2:
+        result["controversial"] = True
+        result["controversial_dimensions"] = controversial_dims
+    else:
+        result["controversial"] = False
 
     # 提取正面/负面摘要，优先使用高权重来源
     for w in weighted[:10]:
@@ -409,6 +473,9 @@ async def research_company(page, company: str, department: str = "", avoid_exam:
         "perks": round(sentiment["perks"], 1),
         "tags": sentiment["tags"],
         "risk_tags": sentiment.get("risk_tags", []),
+        "risk_details": sentiment.get("risk_details", []),
+        "controversial": sentiment.get("controversial", False),
+        "controversial_dimensions": sentiment.get("controversial_dimensions", []),
         "pros": sentiment["pros"][:3],
         "cons": sentiment["cons"][:3],
         "exam": exam,
@@ -495,6 +562,9 @@ async def main():
         "tech_match_score": scoring["scores"].get("tech_match", 0),
         # 风险与标签
         "risk_tags": research.get("risk_tags", []),
+        "risk_details": research.get("risk_details", []),
+        "controversial": research.get("controversial", False),
+        "controversial_dimensions": research.get("controversial_dimensions", []),
         "tags": research.get("tags", []),
         # 摘要
         "summary": summary,
@@ -512,6 +582,18 @@ async def main():
         "snippets_count": research.get("snippets_count", 0),
         "timestamp": datetime.now().isoformat(),
     }
+
+    # 保存到 reports 目录
+    reports_dir = r"D:\GoProject\src\superAgent\reports"
+    os.makedirs(reports_dir, exist_ok=True)
+    dept_part = f"-{department}" if department else ""
+    pos_part = f"-{position}" if position else ""
+    filename = f"{company}{dept_part}{pos_part}-分析报告.json"
+    filepath = os.path.join(reports_dir, filename)
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    print(f"[Saved] {filepath}", file=sys.stderr)
+
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
