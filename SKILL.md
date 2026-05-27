@@ -1,9 +1,9 @@
 ---
-name: comfortable-mill-pulling
+name: 拉磨也要舒服拉
 description: Use when the user wants to evaluate job opportunities - analyzing resume fit with target companies, researching company reputation, collecting interview experiences
 ---
 
-# 我想拉磨拉得舒服
+# 拉磨也要舒服拉
 
 > 互联网打工人的求职决策助手。不将就，拉磨也要挑个好磨。
 
@@ -11,7 +11,7 @@ description: Use when the user wants to evaluate job opportunities - analyzing r
 
 ### 输入条件
 
-用户提供：**公司名称**。可附加：简历路径、--avoid-exam 标志。
+用户提供：**公司名称 + 岗位名称**。可附加：简历路径、--avoid-exam 标志。
 
 ### 评分体系
 
@@ -26,7 +26,7 @@ description: Use when the user wants to evaluate job opportunities - analyzing r
 ### 执行
 
 ```bash
-python <skill_dir>/search_jobs.py "<简历路径>" "<公司名>" [--avoid-exam]
+python <skill_dir>/search_jobs.py "<简历路径>" "<公司名>" "<岗位名>" [--avoid-exam]
 ```
 
 ### 输出格式

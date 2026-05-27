@@ -1,4 +1,4 @@
-# 我想拉磨拉得舒服
+# 拉磨也要舒服拉
 
 > 互联网打工人的 AI 求职决策助手。不将就，拉磨也要挑个好磨。
 
@@ -6,9 +6,9 @@
 
 ## 功能
 
-### 🎯 精准公司分析
+### 🎯 精准岗位匹配分析
 "分析 小红书 Golang开发"
-→ 深度分析一家公司：匹配度 + 全网风评 + 薪资 + 面经真题
+→ 分析你适不适合这家公司的这个岗位：简历匹配度 + 全网风评 + 薪资 + 面经真题
 
 ## 评分体系
 
@@ -36,8 +36,8 @@ git clone https://github.com/mchenziyi/comfortable-mill-pulling.git ~/.agents/sk
 ## 使用
 
 ```bash
-# 精准公司分析
-python ~/.agents/skills/comfortable-mill-pulling/search_jobs.py "<简历路径>" "<公司名>" [--avoid-exam]
+# 精准岗位匹配分析
+python ~/.agents/skills/comfortable-mill-pulling/search_jobs.py "<简历路径>" "<公司名>" "<岗位名>" [--avoid-exam]
 
 # 简历解析
 python ~/.agents/skills/comfortable-mill-pulling/extract_resume.py <简历路径>
