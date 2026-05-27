@@ -1,232 +1,144 @@
 ---
-name: resume-company-evaluator
-description: Use when the user wants to evaluate whether a company is worth applying to by analyzing their resume fit, researching company reputation across multiple platforms, and optionally collecting interview experiences
+name: comfortable-mill-pulling
+description: Use when the user wants to evaluate job opportunities - analyzing resume fit with target companies, researching company reputation, collecting interview experiences, or discovering the best matching companies in a target city
 ---
 
-# Resume Company Evaluator
+# 我想拉磨拉得舒服
 
-## Overview
+> 互联网打工人的求职决策助手。不将就，拉磨也要挑个好磨。
 
-Evaluate a target company and position by: (1) analyzing how well the user's resume matches the role, (2) researching company reputation and employee reviews from multiple platforms, (3) generating a structured report with a recommendation, and (4) optionally collecting interview questions and experiences if the user decides to apply.
+## 两种模式
 
-## Configuration
+| | 🎯 精准分析 | 🔍 城市发现 |
+|------|------|------|
+| 触发 | "分析 网易 Go开发" | "杭州 找 Go后端 20-35K" |
+| 目的 | 一家公司值不值得去 | 哪些公司值得投 |
+| 输出 | 完整报告 + 面经 | Top 5 排名 + 关键指标 |
+| 耗时 | 10-15 分钟 | 3-5 分钟 |
 
-At the start, ask the user for:
+---
 
-- **Resume file path** (e.g., `~/resume.pdf`, `./Golang-陈子异.pdf`) — if not provided, check common paths in the workspace
-- **Company name**
-- **Target position**
+## 🔍 模式 B：城市发现
 
-If the user has used this skill before, remind them of the last-used resume path and offer to reuse it.
+### 输入条件
 
-## Workflow
+用户提供：**城市 + 岗位 + 薪资范围**。可附加：公司规模、行业、远程偏好。
 
-### Stage 1: Resume Parsing
+### 评分体系
 
-Read the resume file using the bundled `extract_resume.py` script:
+| 维度 | 权重 | 考察内容 |
+|------|:--:|------|
+| 技术匹配 | 30% | 技能栈、经验年数、学历 |
+| 薪酬福利 | 25% | 底薪、年终奖、五险一金、补助 |
+| WLB | 20% | 加班、双休、弹性、工作强度 |
+| 稳定性 | 15% | 裁员历史、公司规模、成立年限、融资 |
+| 成长空间 | 10% | 晋升、技术氛围、核心业务线 |
+| 🌟 生活福利 | +10% | 食堂/包餐、下午茶、午休、健身房、班车、零食柜 |
+
+### 执行
+
+```bash
+python <skill_dir>/search_jobs.py "<简历路径>" "<城市>" "<岗位>" [--salary-min N] [--salary-max N]
+```
+
+### 输出格式
+
+```
+🏆 杭州 Go 后端 Top 5
+
+#1 网易 有道 | 匹配 8.0 | 28-55K·18薪 | 综合 8.3
+    WLB 7 · 免费四餐 · 猪场 · 近期外包裁员
+
+#2 字节 飞书 | 匹配 7.5 | 30-50K·15薪 | 综合 7.8
+    加班较多 · 福利好 · 晋升快
+
+...
+
+💡 输入 "分析 网易 Go开发" 可查看完整报告
+```
+
+---
+
+## 🎯 模式 A：精准分析
+
+### Configuration
+
+首次使用时确认：
+- 简历文件路径
+- 公司名称
+- 目标岗位
+
+### Stage 1: 简历解析
 
 ```bash
 python <skill_dir>/extract_resume.py <resume_path>
 ```
 
-This script tries four extraction methods in order:
-1. **PyPDF2** — fast, works for text-based PDFs
-2. **pdfplumber** — better table/layout handling
-3. **PyMuPDF (fitz)** — handles more Chinese font encodings
-4. **OCR (pytesseract + pymupdf renderer)** — handles image-based/scanned PDFs (requires Tesseract system install)
+四级回退：PyPDF2 → pdfplumber → PyMuPDF → OCR（Tesseract）
 
-The script auto-installs missing Python libraries if needed. If OCR is needed, ensure Tesseract is installed (`choco install tesseract` on Windows, `brew install tesseract` on macOS, `apt install tesseract-ocr tesseract-ocr-chi-sim` on Linux).
-
-If all methods fail, ask the user to paste their resume content directly.
-
-Once text is extracted, parse and summarize:
-- Skills (languages, frameworks, tools)
-- Work experience (years, roles, industries)
-- Education background
-- Project highlights
-- Any stated career objectives
-
-Present a brief summary to the user and confirm before proceeding.
-
-### Stage 2: Position Fit Analysis
-
-**Primary method: Use the bundled search script**
+### Stage 2: 岗位匹配
 
 ```bash
 python <skill_dir>/search_company.py "<公司名>" "<岗位名>"
 ```
 
-The script searches 12 queries including JD and position-specific terms. From the JSON output, extract the job descriptions found (especially from Boss直聘、猎聘、LearnKu etc.).
+从 JSON 输出中提取 JD，逐项对比简历。输出匹配度 X/10。
 
-**Fallback: Manual search**
+### Stage 3: 风评搜索
 
-If the script is unavailable, search with these queries:
-- "[公司名] [岗位名] 招聘 JD"
-- "[公司名] [岗位名] 岗位要求"
-- "site:liepin.com [公司名] [岗位名]"
+同上 `search_company.py`，13 组搜索词覆盖所有维度。
+回退方案：Web Search MCP → 手动搜索列表。
 
-Compare the resume against the job description point by point:
-- **Hard skills match**: Which required skills does the candidate have? Which are missing?
-- **Experience match**: Does YOE, industry background, role level align?
-- **Education match**: Degree requirements met?
-- **Overall score**: X/10 with explanation
+### Stage 4: 生成报告
 
-### Stage 3: Company Reputation Research
+保存到 `reports/[公司名]-[岗位名]-分析报告.md`
 
-**Primary method: Bundled Playwright search script**
-
-Run the bundled `search_company.py` which uses a headless Chrome browser to bypass JS rendering and anti-crawling:
-
-```bash
-python <skill_dir>/search_company.py "<公司名>" "<岗位名>"
-```
-
-This script:
-- Uses Playwright with system Chrome/Edge (no extra browser download needed)
-- Searches Bing + DuckDuckGo with 13 targeted Chinese queries
-- Tests direct access to 知乎、看准网、Boss直聘 etc.
-- Fetches full page text of top results for deeper analysis
-- Outputs structured JSON with search results + platform accessibility report
-
-**Fallback: Web Search MCP**
-
-If Playwright is not available or the script fails, fall back to environment search tools (Web Search MCP, Browser MCP, or the `webfetch` tool).
-
-**Fallback: Manual mode**
-
-If all automated methods fail, present the user with a list of search queries to run manually on their browser:
-
-```
-请手动在浏览器搜索以下关键词，并将结果反馈给我：
-- [公司名] 怎么样 脉脉
-- [公司名] 避雷 知乎
-- [公司名] [岗位名] 薪资
-- ...
-```
-
-Aggregate findings into categories:
-- **Positive signals**: Good culture, fair pay, growth opportunities, WLB
-- **Negative signals**: Layoffs, toxic culture, 996/加班 culture, delayed salary, bad management
-- **Compensation info**: Salary range, bonus structure, benefits
-- **Source reference**: Always include where each piece of information came from
-
-### Stage 4: Generate Report
-
-**Output both a conversational summary AND a Markdown file.**
-
-Save the report to the current working directory: `reports/[公司名]-[岗位名]-分析报告.md`
-(Replace special characters and spaces in the filename with hyphens)
-
-**Report template:**
-
+报告模板：
 ```markdown
 # 📊 [公司名] [岗位名] 求职分析报告
 
-> 分析时间：YYYY-MM-DD
-> 目标岗位：[岗位名]
-> 目标公司：[公司名]
-
----
-
-## 一、岗位匹配度：X/10
-
-### 1.1 目标岗位 JD 摘要
-[从搜索结果中提取的岗位要求摘要]
-
-### 1.2 简历匹配分析
-
-| 维度 | 岗位要求 | 我的条件 | 匹配 |
-|------|----------|----------|------|
-| 技能 A | ... | ... | ✅/⚠️/❌ |
-| ... | ... | ... | ... |
-
-### 1.3 优势
-- ...
-
-### 1.4 差距与建议
-- ...
-
----
-
-## 二、公司风评调研
-
-### 2.1 正面评价
-| 评价内容 | 来源 |
-|----------|------|
-| ... | 脉脉/知乎/... |
-
-### 2.2 负面评价 / 风险提示
-| 评价内容 | 来源 | 风险等级 |
-|----------|------|----------|
-| ... | ... | 🔴🟡🟢 |
-
-### 2.3 薪资福利参考
-- 薪资范围：...
-- 年终奖：...
-- 五险一金：...
-- 其他福利：...
-
-### 2.4 加班与工作环境
-- ...
-
----
-
-## 三、综合建议
-
-**推荐等级：🏆 强烈推荐 / 👍 可以考虑 / ⚠️ 谨慎 / 🚫 不推荐**
-
-**理由：**
-[3-5 条总结性理由]
-
----
-
-## 四、面经与面试题（待搜集）
-
-> 此部分为可选内容。如果确认投递，请告知，我将为你搜集该岗位的面经和面试题。
+## 一、公司概况
+## 二、岗位匹配度：X/10
+### 2.1 JD 摘要 | 2.2 匹配分析 | 2.3 优势 | 2.4 差距
+## 三、公司风评调研
+### 3.1 正面评价 | 3.2 负面评价 | 3.3 薪资福利 | 3.4 加班与文化
+## 四、面经与面试题
+### 4.1 面试流程 | 4.2 高频考点 | 4.3 真题
+## 五、综合建议 — 推荐等级 + 理由
 ```
 
-After generating the report, present the key findings in conversation and ask:
-
-> "报告已生成。是否需要我继续搜集 **[公司名] [岗位名]** 的面试题和面经？"
-
-### Stage 5: Interview Preparation (Optional)
-
-Only proceed if the user explicitly confirms.
-
-**Primary method: Bundled interview search script**
+### Stage 5: 面经搜集（可选）
 
 ```bash
 python <skill_dir>/search_interview.py "<公司名>" "<岗位名>"
 ```
 
-This script searches 8 interview-specific queries and fetches full page content from each result.
+或者直接从 `search_company.py` 的输出中拉取已知面经页面。
 
-Alternatively, use `search_company.py` output (which already includes interview-related queries) and direct-fetch the most promising pages (职朋面经、职Q面试、V2EX、知乎).
+---
 
-**If scripts are unavailable**, search for:
-- "[公司名] [岗位名] 面试题 / 面经 / 面试 真题"
-- "[公司名] 面试流程 / 几轮面试 / 面试难度"
-- "site:nowcoder.com [公司名] [岗位名]"
+## 脚本列表
 
-Aggregate by:
-- **面试流程**: How many rounds, what types (phone screen, technical, system design, behavioral, HR)
-- **面试真题**: Actual questions reported, organized by topic (algorithms, system design, language-specific, behavioral)
-- **面试难度**: Overall difficulty rating and common pain points
-- **准备建议**: Key areas to focus on based on collected experiences
+| 脚本 | 用途 | 依赖 |
+|------|------|------|
+| `extract_resume.py` | PDF 简历解析 | PyPDF2/pdfplumber/pymupdf/pytesseract |
+| `search_company.py` | 公司风评 + JD 搜索 | Playwright + Chrome/Edge |
+| `search_interview.py` | 面经面试题搜索 | Playwright + Chrome/Edge |
+| `search_jobs.py` | 城市岗位发现 | Playwright + Chrome/Edge |
 
-Append findings to the report file under Section 4, and present a summary in conversation.
+所有脚本自动安装缺失的 Python 包。
 
-## Search Strategy Notes
+---
 
-- Always run platform-specific searches in parallel — they are independent
-- For each search result, open the most relevant 3-5 pages for detailed reading
-- Prioritize recent content (within 1-2 years) — company culture can change
-- Cross-reference: one person's complaint may be an outlier; look for patterns across platforms
-- If search returns no results for a platform, note it and move on — don't retry
-- In China, platforms like 知乎、脉脉、小红书 may have more candid reviews than Glassdoor-style sites
+## 搜索策略
 
-## Report Storage
+- 优先 Playwright 浏览器搜索（绕过 JS 渲染和反爬）
+- 回退到环境 Web Search MCP
+- 最后回退到用户手动搜索关键词列表
+- 强调交叉验证，单一来源不可信
 
-- Directory: `reports/` (create if not exists)
-- Filename: `[公司名]-[岗位名]-分析报告.md`
-- If filename conflicts, append `-2`, `-3`, etc.
+## 报告存储
+
+- 目录：`reports/`
+- 文件名：`[公司名]-[岗位名]-分析报告.md`
+- 冲突时追加 `-2`、`-3`
