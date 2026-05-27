@@ -177,7 +177,7 @@ def calculate_confidence(results: list, sentiment: dict) -> float:
     total = base_score + count_score + source_score + risk_score
     return round(min(total, 1.0), 2)
 
-def generate_summary(company: str, research: dict, scoring: dict) -> str:
+def generate_summary(company: str, department: str, research: dict, scoring: dict) -> str:
     """生成一句话摘要"""
     total = scoring["total"]
     wlb = research.get("wlb", 5)
@@ -212,7 +212,8 @@ def generate_summary(company: str, research: dict, scoring: dict) -> str:
     if confidence < 0.5:
         conf_hint = "（数据不足，仅供参考）"
 
-    return f"{company} {rating}，总分{total}/10，{wlb_desc}{risk_hint}{conf_hint}"
+    dept_info = f" {department}" if department else ""
+    return f"{company}{dept_info} {rating}，总分{total}/10，{wlb_desc}{risk_hint}{conf_hint}"
 
 def _match_patterns(text: str, patterns: list[tuple[str, float]]) -> float:
     score = 0.0
@@ -352,12 +353,22 @@ def analyze_sentiment(snippets: list) -> dict:
 
     return result
 
-async def research_company(page, company: str, avoid_exam: bool = False) -> dict:
+async def research_company(page, company: str, department: str = "", avoid_exam: bool = False) -> dict:
+    # 基础查询（公司级）
     queries = [
         f"{company} 工作 体验 评价",
         f"{company} 加班 福利 薪资",
         f"{company} 996 WLB",
     ]
+
+    # 部门级查询（如果指定了部门）
+    if department:
+        queries.extend([
+            f"{company} {department} 工作 体验",
+            f"{company} {department} 加班 评价",
+            f"{company} {department} 团队 氛围",
+        ])
+
     if avoid_exam:
         queries.append(f"{company} 笔试 难度 面试")
 
@@ -433,29 +444,45 @@ def score_company(skills: dict, research: dict, avoid_exam: bool) -> dict:
 async def main():
     args = sys.argv[1:]
     if len(args) < 2:
-        print(json.dumps({"error":"Usage: python search_jobs.py <resume> <company> [--avoid-exam]"}))
+        print(json.dumps({"error":"Usage: python search_jobs.py <resume> <company> [department] [--avoid-exam]"}))
         sys.exit(1)
 
     resume_path, company = args[0], args[1]
+    department = ""
+    position = ""
     avoid_exam = "--avoid-exam" in args
+
+    # 解析部门和岗位参数
+    non_flag_args = [a for a in args[2:] if not a.startswith("--")]
+    if len(non_flag_args) >= 2:
+        department = non_flag_args[0]
+        position = non_flag_args[1]
+    elif len(non_flag_args) == 1:
+        # 如果只有一个参数，判断是部门还是岗位
+        # 简单启发：包含"部"字的是部门，否则是岗位
+        if "部" in non_flag_args[0] or "组" in non_flag_args[0] or "团队" in non_flag_args[0]:
+            department = non_flag_args[0]
+        else:
+            position = non_flag_args[0]
 
     resume_text = load_resume(resume_path)
     skills = extract_skills_from_resume(resume_text)
-    print(f"[Analysis] {company} | Skills: {skills['languages']}", file=sys.stderr)
+    dept_info = f" | 部门: {department}" if department else ""
+    print(f"[Analysis] {company}{dept_info} | Skills: {skills['languages']}", file=sys.stderr)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(channel="chrome", headless=True, args=["--no-sandbox"])
         ctx = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36", locale="zh-CN")
         page = await ctx.new_page()
 
-        print(f"[Research] Searching {company}...", file=sys.stderr)
-        research = await research_company(page, company, avoid_exam)
+        print(f"[Research] Searching {company}{' ' + department if department else ''}...", file=sys.stderr)
+        research = await research_company(page, company, department, avoid_exam)
         scoring = score_company(skills, research, avoid_exam)
 
         await browser.close()
 
     # 生成摘要
-    summary = generate_summary(company, research, scoring)
+    summary = generate_summary(company, department, research, scoring)
 
     # 固定输出 Schema
     output = {
@@ -474,7 +501,8 @@ async def main():
         "confidence": research.get("confidence", 0.1),
         # 详细信息
         "company": company,
-        "position": args[2] if len(args) > 2 else "",
+        "department": department,
+        "position": position,
         "skills_found": skills,
         "avoid_exam": avoid_exam,
         "exam": research.get("exam", "未评估"),
