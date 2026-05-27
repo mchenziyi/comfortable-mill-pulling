@@ -150,6 +150,33 @@ def extract_risk_tags(text: str) -> list[str]:
                 tags.append(tag)
     return tags
 
+def calculate_confidence(results: list, sentiment: dict) -> float:
+    """计算分析置信度（0-1）
+    基于：
+    1. 搜索结果数量（越多越可信）
+    2. 信源质量（高权重来源越多越可信）
+    3. 风险标签数量（有明确风险信号更可信）
+    """
+    if not results:
+        return 0.1
+
+    # 基础分：基于结果数量
+    count_score = min(len(results) / 20, 0.4)  # 20条结果得满分0.4
+
+    # 信源质量分
+    high_weight_count = sum(1 for r in results if r.get("source_weight", 0.5) >= 0.8)
+    source_score = min(high_weight_count / 10, 0.3)  # 10条高权重来源得满分0.3
+
+    # 风险标签分（有明确风险信号说明信息足够）
+    risk_count = len(sentiment.get("risk_tags", []))
+    risk_score = min(risk_count / 3, 0.2)  # 3个风险标签得满分0.2
+
+    # 基础可信度
+    base_score = 0.1
+
+    total = base_score + count_score + source_score + risk_score
+    return round(min(total, 1.0), 2)
+
 def _match_patterns(text: str, patterns: list[tuple[str, float]]) -> float:
     score = 0.0
     for pat, weight in patterns:
@@ -324,6 +351,9 @@ async def research_company(page, company: str, avoid_exam: bool = False) -> dict
         st = r.get("source_type", "unknown")
         source_counts[st] = source_counts.get(st, 0) + 1
 
+    # 计算置信度
+    confidence = calculate_confidence(all_results, sentiment)
+
     return {
         "wlb": round(sentiment["wlb"], 1),
         "stability": round(sentiment["stability"], 1),
@@ -336,6 +366,7 @@ async def research_company(page, company: str, avoid_exam: bool = False) -> dict
         "exam": exam,
         "snippets_count": len(all_results),
         "source_distribution": source_counts,
+        "confidence": confidence,
     }
 
 def score_company(skills: dict, research: dict, avoid_exam: bool) -> dict:
@@ -398,6 +429,7 @@ async def main():
         "exam": research.get("exam", "未评估"),
         "note": f"实时搜索({research['snippets_count']}条摘要)",
         "source_distribution": research.get("source_distribution", {}),
+        "confidence": research.get("confidence", 0.1),
         "scores": scoring["scores"],
         "total": scoring["total"],
     }
