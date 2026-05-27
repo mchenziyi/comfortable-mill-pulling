@@ -126,6 +126,30 @@ def get_source_weight(url: str, title: str) -> float:
     source_type = identify_source(url, title)
     return SOURCE_WEIGHTS.get(source_type, 0.5)
 
+# 风险标签系统：识别真实风险信号
+RISK_PATTERNS = [
+    (r'加班[严很]|996|大小周|强制加班|无偿加班', "加班严重"),
+    (r'看[组部]|组[长导]决定|运气成分', "看组"),
+    (r'PUA|精神控制|打压|贬低|否定', "leader PUA"),
+    (r'裁员|优化|毕业|人员调整|缩编', "裁员风险"),
+    (r'晋升[慢难]|天花板|晋升无望|晋升周期长', "晋升慢"),
+    (r'HC[冻停]|暂停招聘|无HC|没有HC', "HC冻结"),
+    (r'拖欠工资|欠薪|延迟发放', "薪资风险"),
+    (r'内卷|恶性竞争|抢功|甩锅', "内卷严重"),
+    (r'管理混乱|朝令夕改|目标不清', "管理混乱"),
+    (r'技术[落后旧]|维护老代码|没有技术含量', "技术落后"),
+]
+
+def extract_risk_tags(text: str) -> list[str]:
+    """从文本中提取风险标签"""
+    tags = []
+    text_lower = text.lower()
+    for pattern, tag in RISK_PATTERNS:
+        if re.search(pattern, text_lower):
+            if tag not in tags:
+                tags.append(tag)
+    return tags
+
 def _match_patterns(text: str, patterns: list[tuple[str, float]]) -> float:
     score = 0.0
     for pat, weight in patterns:
@@ -229,7 +253,7 @@ def analyze_sentiment(snippets: list) -> dict:
     # 合并所有文本（高权重的重复出现以增加影响力）
     all_text = " ".join([w["text"] for w in weighted]).lower()
     
-    result = {"wlb":5.0,"stability":5.0,"growth":5.0,"perks":0.0,"tags":[],"pros":[],"cons":[]}
+    result = {"wlb":5.0,"stability":5.0,"growth":5.0,"perks":0.0,"tags":[],"risk_tags":[],"pros":[],"cons":[]}
 
     wlb_delta, wlb_tags = analyze_wlb(all_text)
     result["wlb"] = max(1.0, min(10.0, 5.0 + wlb_delta))
@@ -246,6 +270,10 @@ def analyze_sentiment(snippets: list) -> dict:
     perks_score, perks_tags = analyze_perks(all_text)
     result["perks"] = perks_score
     result["tags"].extend(perks_tags)
+
+    # 提取风险标签
+    risk_tags = extract_risk_tags(all_text)
+    result["risk_tags"] = risk_tags
 
     # 提取正面/负面摘要，优先使用高权重来源
     for w in weighted[:10]:
@@ -302,6 +330,7 @@ async def research_company(page, company: str, avoid_exam: bool = False) -> dict
         "growth": round(sentiment["growth"], 1),
         "perks": round(sentiment["perks"], 1),
         "tags": sentiment["tags"],
+        "risk_tags": sentiment.get("risk_tags", []),
         "pros": sentiment["pros"][:3],
         "cons": sentiment["cons"][:3],
         "exam": exam,
@@ -363,6 +392,7 @@ async def main():
         "avoid_exam": avoid_exam,
         "timestamp": datetime.now().isoformat(),
         "tags": research.get("tags", []),
+        "risk_tags": research.get("risk_tags", []),
         "pros": research.get("pros", []),
         "cons": research.get("cons", []),
         "exam": research.get("exam", "未评估"),
