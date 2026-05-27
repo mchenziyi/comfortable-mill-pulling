@@ -177,6 +177,43 @@ def calculate_confidence(results: list, sentiment: dict) -> float:
     total = base_score + count_score + source_score + risk_score
     return round(min(total, 1.0), 2)
 
+def generate_summary(company: str, research: dict, scoring: dict) -> str:
+    """生成一句话摘要"""
+    total = scoring["total"]
+    wlb = research.get("wlb", 5)
+    risk_tags = research.get("risk_tags", [])
+    confidence = research.get("confidence", 0.1)
+
+    # 评级
+    if total >= 8:
+        rating = "强烈推荐"
+    elif total >= 6:
+        rating = "推荐"
+    elif total >= 4:
+        rating = "一般"
+    else:
+        rating = "不推荐"
+
+    # WLB描述
+    if wlb >= 7:
+        wlb_desc = "WLB好"
+    elif wlb >= 5:
+        wlb_desc = "WLB中等"
+    else:
+        wlb_desc = "加班较多"
+
+    # 风险提示
+    risk_hint = ""
+    if risk_tags:
+        risk_hint = f"，需注意：{','.join(risk_tags[:2])}"
+
+    # 置信度提示
+    conf_hint = ""
+    if confidence < 0.5:
+        conf_hint = "（数据不足，仅供参考）"
+
+    return f"{company} {rating}，总分{total}/10，{wlb_desc}{risk_hint}{conf_hint}"
+
 def _match_patterns(text: str, patterns: list[tuple[str, float]]) -> float:
     score = 0.0
     for pat, weight in patterns:
@@ -417,21 +454,35 @@ async def main():
 
         await browser.close()
 
+    # 生成摘要
+    summary = generate_summary(company, research, scoring)
+
+    # 固定输出 Schema
     output = {
+        # 核心评分
+        "overall_score": scoring["total"],
+        "wlb_score": research.get("wlb", 5),
+        "growth_score": research.get("growth", 5),
+        "stability_score": research.get("stability", 5),
+        "perks_score": research.get("perks", 0),
+        "tech_match_score": scoring["scores"].get("tech_match", 0),
+        # 风险与标签
+        "risk_tags": research.get("risk_tags", []),
+        "tags": research.get("tags", []),
+        # 摘要
+        "summary": summary,
+        "confidence": research.get("confidence", 0.1),
+        # 详细信息
         "company": company,
+        "position": args[2] if len(args) > 2 else "",
         "skills_found": skills,
         "avoid_exam": avoid_exam,
-        "timestamp": datetime.now().isoformat(),
-        "tags": research.get("tags", []),
-        "risk_tags": research.get("risk_tags", []),
+        "exam": research.get("exam", "未评估"),
         "pros": research.get("pros", []),
         "cons": research.get("cons", []),
-        "exam": research.get("exam", "未评估"),
-        "note": f"实时搜索({research['snippets_count']}条摘要)",
         "source_distribution": research.get("source_distribution", {}),
-        "confidence": research.get("confidence", 0.1),
-        "scores": scoring["scores"],
-        "total": scoring["total"],
+        "snippets_count": research.get("snippets_count", 0),
+        "timestamp": datetime.now().isoformat(),
     }
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
