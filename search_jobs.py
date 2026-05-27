@@ -21,7 +21,7 @@ except ImportError:
 
 
 def extract_skills_from_resume(resume_text: str) -> dict:
-    """Extract key skills from resume text."""
+    """Extract key skills from resume text. Handles OCR text with inter-character spaces."""
     skills = {
         "languages": [],
         "frameworks": [],
@@ -30,18 +30,23 @@ def extract_skills_from_resume(resume_text: str) -> dict:
         "yoe": 0,
     }
 
-    text_lower = resume_text.lower()
-    text = resume_text
+    # Normalize: collapse inter-character spaces from OCR output
+    # "G o l a n g" → "Golang", "M y S Q L" → "MySQL"
+    normalized = re.sub(r'(?<=\w) (?=\w)', '', resume_text)
+    text_lower = normalized.lower()
 
     # Languages
-    for lang in ["Go", "Golang", "Python", "Java", "C++", "Rust", "TypeScript", "JavaScript"]:
+    for lang in ["Go", "Python", "Java", "Rust", "TypeScript", "JavaScript", "C++"]:
         if lang.lower() in text_lower:
-            skills["languages"].append(lang)
+            if lang not in skills["languages"]:
+                skills["languages"].append(lang)
 
     # Frameworks
-    for fw in ["Gin", "Go-zero", "Kratos", "Echo", "gRPC", "Spring", "Django", "FastAPI"]:
-        if fw.lower() in text_lower:
-            skills["frameworks"].append(fw)
+    for fw in ["Gin", "gozero", "Go-zero", "Kratos", "Echo", "gRPC", "Spring", "Django", "FastAPI"]:
+        if fw.lower().replace("-", "") in text_lower.replace("-", "").replace(" ", ""):
+            clean = fw.replace("gozero", "Go-zero").replace("Go-zero", "Go-zero")
+            if clean not in skills["frameworks"]:
+                skills["frameworks"].append(clean)
 
     # Databases
     for db in ["MySQL", "Redis", "PostgreSQL", "MongoDB", "Elasticsearch", "Kafka"]:
@@ -49,12 +54,14 @@ def extract_skills_from_resume(resume_text: str) -> dict:
             skills["databases"].append(db)
 
     # DevOps
-    for dev in ["Docker", "Kubernetes", "K8s", "CI/CD", "Jenkins", "Prometheus"]:
+    for dev in ["Docker", "Kubernetes", "K8s", "CICD", "Jenkins", "Prometheus", "etcd", "Consul"]:
         if dev.lower() in text_lower:
-            skills["devops"].append(dev)
+            clean = "K8s" if dev == "Kubernetes" else dev
+            if clean not in skills["devops"]:
+                skills["devops"].append(clean)
 
-    # YOE estimation
-    yoe_match = re.search(r'(\d+)\s*年', text)
+    # YOE estimation - search in normalized text
+    yoe_match = re.search(r'(\d+)\s*年', normalized)
     if yoe_match:
         skills["yoe"] = int(yoe_match.group(1))
 
@@ -96,8 +103,9 @@ async def search_jobs_playwright(page, city: str, position: str, salary_min: int
 
     queries = [
         f"{city} {position} 招聘",
-        f"{city} {position} 社招 薪资",
-        f"{city} Go 后端 招聘",
+        f"{city} Go 开发 招聘 薪资",
+        f"{city} Golang 社招",
+        f"site:zhipin.com {city} {position}",
     ]
 
     for query in queries:
@@ -159,6 +167,20 @@ def extract_company_name(title: str, snippet: str) -> str | None:
         "同程", "去哪儿", "58同城", "贝壳", "汽车之家",
         "微众银行", "众安", "老虎证券", "富途",
         "Zoom", "微软", "亚马逊", "Google", "Apple",
+        "网易有道", "网易互娱", "网易云音乐", "网易严选",
+        "飞书", "抖音", "TikTok", "今日头条",
+        "阿里云", "淘宝", "天猫", "钉钉", "菜鸟",
+        "微信", "腾讯云", "腾讯游戏",
+        "百度智能云", "百度地图",
+        "京东科技", "京东物流",
+        "斗鱼", "虎牙", "哈啰", "货拉拉", "满帮",
+        "Soul", "最右", "喜马拉雅", "蜻蜓FM", "荔枝", "映客",
+        "阅文", "趣头条", "虎扑", "毒", "nice",
+        "商汤", "旷视", "依图", "云从",
+        "第四范式", "明略", "百分点",
+        "PingCAP", "TiDB", "涛思数据", "TDengine",
+        "StreamNative", "Apache", "Pulsar",
+        "EMQ", "NebulaGraph", "ZILLIZ", "Milvus",
     ]
 
     text = title + " " + snippet
@@ -316,6 +338,82 @@ COMPANY_REPUTATION = {
     "唯品会": {
         "wlb": 7, "stability": 7, "growth": 4,
         "life_perks": 5, "note": "广州总部, WLB好, 增长放缓, 福利一般",
+    },
+    "阿里云": {
+        "wlb": 5, "stability": 8, "growth": 8,
+        "life_perks": 7, "note": "云计算龙头, 食堂+下午茶, 技术氛围好, 加班看部门",
+    },
+    "菜鸟": {
+        "wlb": 5, "stability": 7, "growth": 7,
+        "life_perks": 6, "note": "阿里旗下物流, 加班中等, 业务增长, 福利尚可",
+    },
+    "钉钉": {
+        "wlb": 5, "stability": 7, "growth": 7,
+        "life_perks": 7, "note": "企业IM, 阿里系, 增长不错, 福利同阿里",
+    },
+    "PingCAP": {
+        "wlb": 8, "stability": 7, "growth": 7,
+        "life_perks": 7, "note": "TiDB, 开源数据库, 远程友好, WLB好, 技术氛围佳",
+    },
+    "斗鱼": {
+        "wlb": 6, "stability": 5, "growth": 5,
+        "life_perks": 5, "note": "直播平台, 武汉总部, 增长放缓, 福利一般",
+    },
+    "哈啰": {
+        "wlb": 6, "stability": 6, "growth": 6,
+        "life_perks": 5, "note": "共享出行, 阿里系, 上海总部, 中等规模",
+    },
+    "Shopee": {
+        "wlb": 6, "stability": 7, "growth": 7,
+        "life_perks": 7, "note": "东南亚电商, 深圳+上海, 福利好, 加班看部门, 有裁员传闻",
+    },
+    "Soul": {
+        "wlb": 6, "stability": 5, "growth": 6,
+        "life_perks": 6, "note": "社交App, 上海总部, 年轻化, 中等规模",
+    },
+    "大疆": {
+        "wlb": 5, "stability": 8, "growth": 7,
+        "life_perks": 6, "note": "无人机龙头, 深圳, 技术强, 有加班, 福利好",
+    },
+    "商汤": {
+        "wlb": 6, "stability": 5, "growth": 6,
+        "life_perks": 6, "note": "AI四小龙, 北京/上海, 技术氛围好, 有裁员调整",
+    },
+    "Zoom": {
+        "wlb": 7, "stability": 8, "growth": 6,
+        "life_perks": 7, "note": "视频会议, 合肥/杭州/苏州研发, 远程友好, WLB好, 外企文化",
+    },
+    "微软": {
+        "wlb": 9, "stability": 9, "growth": 6,
+        "life_perks": 8, "note": "外企天花板, 北京/苏州/上海, 不加班, 福利顶级, 成长偏慢",
+    },
+    "Shein": {
+        "wlb": 5, "stability": 7, "growth": 8,
+        "life_perks": 6, "note": "快时尚电商, 广州/南京, 增长快, 加班较多, 薪资高",
+    },
+    "莉莉丝": {
+        "wlb": 6, "stability": 7, "growth": 8,
+        "life_perks": 7, "note": "游戏公司, 上海, 万国觉醒, 福利好, 技术氛围好",
+    },
+    "完美世界": {
+        "wlb": 6, "stability": 6, "growth": 6,
+        "life_perks": 6, "note": "老牌游戏公司, 北京, 有裁员, 福利中等",
+    },
+    "喜马拉雅": {
+        "wlb": 6, "stability": 5, "growth": 6,
+        "life_perks": 6, "note": "音频平台, 上海, 增长中, 中等规模",
+    },
+    "Keep": {
+        "wlb": 6, "stability": 5, "growth": 6,
+        "life_perks": 7, "note": "运动App, 北京, 有健身房福利, 增长平缓",
+    },
+    "富途": {
+        "wlb": 6, "stability": 7, "growth": 7,
+        "life_perks": 7, "note": "互联网券商, 深圳, 金融科技, 福利好, 加班中等",
+    },
+    "贝壳": {
+        "wlb": 6, "stability": 6, "growth": 5,
+        "life_perks": 5, "note": "房产平台, 北京, 行业波动, 增长放缓",
     },
 }
 

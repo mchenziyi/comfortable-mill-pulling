@@ -92,52 +92,78 @@ def try_pymupdf(path: str) -> str | None:
 
 
 def try_ocr(path: str) -> str | None:
-    """OCR using pymupdf for rendering + pytesseract for recognition.
-    Requires: Tesseract OCR installed with chi_sim language data."""
+    """OCR using pymupdf for rendering + tesseract CLI for recognition.
+    Avoids pytesseract's numpy dependency issues."""
     try:
         importlib.import_module("fitz")
-        importlib.import_module("pytesseract")
     except ImportError:
         try:
             install("pymupdf")
-            install("pytesseract")
-            install("Pillow")
+            importlib.import_module("fitz")
         except Exception:
             return None
 
     import fitz
-    import pytesseract
     from PIL import Image
 
-    # Auto-detect tesseract path on Windows
-    if sys.platform == "win32":
-        for tpath in [
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        ]:
-            if os.path.exists(tpath):
-                pytesseract.pytesseract.tesseract_cmd = tpath
-                break
+    # Find tesseract binary
+    tesseract_bin = None
+    for tpath in [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+    ]:
+        if os.path.exists(tpath):
+            tesseract_bin = tpath
+            break
+    else:
+        # Try PATH
+        import shutil
+        found = shutil.which("tesseract")
+        if found:
+            tesseract_bin = found
 
-    # Also check TESSDATA_PREFIX for chi_sim
-    if "TESSDATA_PREFIX" not in os.environ:
+    if not tesseract_bin:
+        print("[OCR] Tesseract not found. Install: winget install UB-Mannheim.TesseractOCR", file=sys.stderr)
+        return None
+
+    # Find chi_sim language data
+    tessdata_prefix = os.environ.get("TESSDATA_PREFIX", "")
+    if not tessdata_prefix:
         for prefix in [
             r"C:\Program Files\Tesseract-OCR",
             r"C:\Program Files (x86)\Tesseract-OCR",
-            os.path.join(os.environ.get("TEMP", "/tmp"), "tessdata"),
         ]:
             if os.path.exists(os.path.join(prefix, "tessdata", "chi_sim.traineddata")):
-                os.environ["TESSDATA_PREFIX"] = prefix
+                tessdata_prefix = prefix
                 break
+        else:
+            custom = os.path.join(os.environ.get("TEMP", "/tmp"), "tessdata")
+            if os.path.exists(os.path.join(custom, "chi_sim.traineddata")):
+                tessdata_prefix = custom
+
+    env = os.environ.copy()
+    if tessdata_prefix:
+        env["TESSDATA_PREFIX"] = tessdata_prefix
 
     doc = fitz.open(path)
     parts = []
-    for page in doc:
-        pix = page.get_pixmap(dpi=250)
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-        text = pytesseract.image_to_string(img, lang="chi_sim+eng")
-        if text and text.strip():
-            parts.append(text.strip())
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(dpi=250)
+            png_path = os.path.join(tmp, f"page_{i}.png")
+            txt_path = os.path.join(tmp, f"page_{i}")
+            pix.save(png_path)
+            try:
+                subprocess.run(
+                    [tesseract_bin, png_path, txt_path, "-l", "chi_sim+eng"],
+                    capture_output=True, timeout=30, env=env
+                )
+                with open(txt_path + ".txt", "r", encoding="utf-8") as f:
+                    text = f.read().strip()
+                if text:
+                    parts.append(text)
+            except Exception:
+                pass
     doc.close()
     result = "\n\n".join(parts)
     return result if result.strip() else None
