@@ -60,7 +60,15 @@ async def search_ddg(page, query: str, max_results: int = 8) -> list[dict]:
                 snippet_el = await item.query_selector(".result__snippet")
                 snippet = await snippet_el.inner_text() if snippet_el else ""
                 if title and href:
-                    results.append({"title": title.strip(), "url": href, "snippet": snippet.strip()})
+                    source_type = identify_source(href, title)
+                    source_weight = get_source_weight(href, title)
+                    results.append({
+                        "title": title.strip(),
+                        "url": href,
+                        "snippet": snippet.strip(),
+                        "source_type": source_type,
+                        "source_weight": source_weight,
+                    })
             except: continue
     except: pass
     return results
@@ -70,6 +78,53 @@ def extract_salary_range(text: str) -> list[int] | None:
         m = re.search(pat, text)
         if m: return [int(m.group(1)), int(m.group(2))]
     return None
+
+# 信源权重：不同来源的信息可信度不同
+SOURCE_WEIGHTS = {
+    "official": 1.0,    # 官方网站
+    "interview": 0.9,   # 面经网站（牛客、力扣）
+    "employee": 0.85,   # 员工评价（知乎、脉脉）
+    "anonymous": 0.75,  # 匿名论坛（V2EX）
+    "news": 0.6,        # 新闻/博客
+    "unknown": 0.5,     # 未知来源
+}
+
+def identify_source(url: str, title: str) -> str:
+    """识别搜索结果的来源类型"""
+    url_lower = url.lower()
+    title_lower = title.lower()
+    
+    # 官方网站
+    if any(kw in url_lower for kw in [".com/", ".cn/", "career", "jobs", "recruit"]):
+        if any(kw in url_lower for kw in ["xiaohongshu", "baidu", "alibaba", "tencent", "bytedance"]):
+            return "official"
+    
+    # 面经网站
+    if any(kw in url_lower for kw in ["nowcoder", "leetcode", "cnblogs", "jianshu"]):
+        return "interview"
+    if any(kw in title_lower for kw in ["面经", "面试题", "笔试"]):
+        return "interview"
+    
+    # 员工评价
+    if any(kw in url_lower for kw in ["zhihu", "maimai", "kanzhun", "jobui"]):
+        return "employee"
+    if any(kw in title_lower for kw in ["工作体验", "员工评价", "在职"]):
+        return "employee"
+    
+    # 匿名论坛
+    if any(kw in url_lower for kw in ["v2ex", "tieba", "douban"]):
+        return "anonymous"
+    
+    # 新闻/博客
+    if any(kw in url_lower for kw in ["36kr", "techcrunch", "reuters", "sina", "sohu"]):
+        return "news"
+    
+    return "unknown"
+
+def get_source_weight(url: str, title: str) -> float:
+    """获取信源权重"""
+    source_type = identify_source(url, title)
+    return SOURCE_WEIGHTS.get(source_type, 0.5)
 
 def _match_patterns(text: str, patterns: list[tuple[str, float]]) -> float:
     score = 0.0
@@ -158,8 +213,22 @@ def analyze_exam_difficulty(text: str) -> str:
     if has_easy: return "简单"
     return "中等"
 
-def analyze_sentiment(snippets: list[str]) -> dict:
-    all_text = " ".join(snippets).lower()
+def analyze_sentiment(snippets: list) -> dict:
+    """分析情感，支持加权摘要。
+    snippets: list of str (旧格式) 或 list of dict (新格式，含 text/weight/source)
+    """
+    # 兼容旧格式（纯字符串列表）
+    if snippets and isinstance(snippets[0], str):
+        weighted = [{"text": s, "weight": 1.0, "source": "unknown"} for s in snippets]
+    else:
+        weighted = snippets
+
+    # 按权重排序，高权重的排前面
+    weighted.sort(key=lambda x: x.get("weight", 0.5), reverse=True)
+
+    # 合并所有文本（高权重的重复出现以增加影响力）
+    all_text = " ".join([w["text"] for w in weighted]).lower()
+    
     result = {"wlb":5.0,"stability":5.0,"growth":5.0,"perks":0.0,"tags":[],"pros":[],"cons":[]}
 
     wlb_delta, wlb_tags = analyze_wlb(all_text)
@@ -178,8 +247,9 @@ def analyze_sentiment(snippets: list[str]) -> dict:
     result["perks"] = perks_score
     result["tags"].extend(perks_tags)
 
-    for s in snippets[:5]:
-        s_clean = s.strip()
+    # 提取正面/负面摘要，优先使用高权重来源
+    for w in weighted[:10]:
+        s_clean = w["text"].strip()
         if len(s_clean) < 10 or len(s_clean) > 100: continue
         if re.search(r'不加班|双休|不卷|福利好|福利不错|下午茶|免费[三一]餐|包吃', s_clean):
             if s_clean not in result["pros"]:
@@ -199,15 +269,32 @@ async def research_company(page, company: str, avoid_exam: bool = False) -> dict
     if avoid_exam:
         queries.append(f"{company} 笔试 难度 面试")
 
-    all_snippets = []
+    all_results = []
     for q in queries:
         results = await search_ddg(page, q, 5)
-        for r in results:
-            all_snippets.append(r["snippet"])
+        all_results.extend(results)
         await page.wait_for_timeout(500)
 
-    sentiment = analyze_sentiment(all_snippets)
-    exam = analyze_exam_difficulty(" ".join(all_snippets)) if avoid_exam else "未评估"
+    # 按信源权重排序，高权重的排前面
+    all_results.sort(key=lambda x: x.get("source_weight", 0.5), reverse=True)
+
+    # 提取带权重的摘要
+    weighted_snippets = []
+    for r in all_results:
+        weighted_snippets.append({
+            "text": r["snippet"],
+            "weight": r.get("source_weight", 0.5),
+            "source": r.get("source_type", "unknown"),
+        })
+
+    sentiment = analyze_sentiment(weighted_snippets)
+    exam = analyze_exam_difficulty(" ".join([r["snippet"] for r in all_results])) if avoid_exam else "未评估"
+
+    # 统计信源分布
+    source_counts = {}
+    for r in all_results:
+        st = r.get("source_type", "unknown")
+        source_counts[st] = source_counts.get(st, 0) + 1
 
     return {
         "wlb": round(sentiment["wlb"], 1),
@@ -218,7 +305,8 @@ async def research_company(page, company: str, avoid_exam: bool = False) -> dict
         "pros": sentiment["pros"][:3],
         "cons": sentiment["cons"][:3],
         "exam": exam,
-        "snippets_count": len(all_snippets),
+        "snippets_count": len(all_results),
+        "source_distribution": source_counts,
     }
 
 def score_company(skills: dict, research: dict, avoid_exam: bool) -> dict:
@@ -279,6 +367,7 @@ async def main():
         "cons": research.get("cons", []),
         "exam": research.get("exam", "未评估"),
         "note": f"实时搜索({research['snippets_count']}条摘要)",
+        "source_distribution": research.get("source_distribution", {}),
         "scores": scoring["scores"],
         "total": scoring["total"],
     }
