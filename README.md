@@ -16,7 +16,7 @@
 
 ```bash
 # 下载到 skills 目录
-git clone https://github.com/<your-username>/resume-company-evaluator.git ~/.agents/skills/resume-company-evaluator
+git clone https://github.com/mchenziyi/resume-company-evaluator.git ~/.agents/skills/resume-company-evaluator
 ```
 
 目录结构：
