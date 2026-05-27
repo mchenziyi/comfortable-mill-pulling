@@ -4,14 +4,10 @@
 
 一个 opencode / Claude Code / Cursor 可用的 Skill。
 
-## 两种模式
+## 功能
 
-### 🔍 城市发现
-"杭州 找 Go 后端 20-35K"
-→ 自动搜索该城市最适合你的 Top 5 公司，按综合评分排名
-
-### 🎯 精准分析
-"分析 网易 Go 开发"
+### 🎯 精准公司分析
+"分析 小红书 Golang开发"
 → 深度分析一家公司：匹配度 + 全网风评 + 薪资 + 面经真题
 
 ## 评分体系
@@ -19,11 +15,10 @@
 | 维度 | 权重 | 内容 |
 |------|:--:|------|
 | 技术匹配 | 30% | 技能栈、经验、学历 |
-| 薪酬福利 | 25% | 底薪、年终奖、五险一金 |
-| WLB | 20% | 加班、双休、弹性 |
-| 稳定性 | 15% | 裁员、规模、年限 |
-| 成长空间 | 10% | 晋升、技术氛围 |
-| 🌟 生活福利 | +10% | 食堂、下午茶、午休、健身房 |
+| WLB | 25% | 加班、双休、弹性（±3 cap） |
+| 生活福利 | 20% | 食堂、下午茶、房补、远程（0-5 cap） |
+| 稳定性 | 15% | 裁员、规模、融资（±3 cap） |
+| 成长空间 | 10% | 晋升、技术氛围（±3 cap） |
 
 ## 安装
 
@@ -38,13 +33,36 @@ git clone https://github.com/mchenziyi/comfortable-mill-pulling.git ~/.agents/sk
 - Chrome/Edge 浏览器
 - Tesseract OCR（可选，用于图片型 PDF 简历）
 
+## 使用
+
+```bash
+# 精准公司分析
+python ~/.agents/skills/comfortable-mill-pulling/search_jobs.py "<简历路径>" "<公司名>" [--avoid-exam]
+
+# 简历解析
+python ~/.agents/skills/comfortable-mill-pulling/extract_resume.py <简历路径>
+
+# 公司风评搜索
+python ~/.agents/skills/comfortable-mill-pulling/search_company.py "<公司名>" "<岗位名>"
+
+# 面经搜索
+python ~/.agents/skills/comfortable-mill-pulling/search_interview.py "<公司名>" "<岗位名>"
+```
+
+## 特点
+
+- **完全实时搜索**：不依赖预置数据库，每次分析都是最新的
+- **细粒度情感分析**：加权正则匹配，±3 分浮动
+- **笔试难度分析**：`--avoid-exam` 标识规避难笔试公司
+- **面试策略生成**：根据公司特点定制面试准备
+
 ## 示例
 
 ```
 📂 reports/
-├── 边锋集团-Golang开发工程师-分析报告.md
-├── 字节跳动-AI-Agent开发-分析报告.md
-└── 网易-Golang开发工程师-分析报告.md
+├── 小红书-Golang开发-分析报告.md
+├── 网易-Golang开发-分析报告.md
+└── 字节跳动-AI-Agent开发-分析报告.md
 ```
 
 ## License
