@@ -81,10 +81,11 @@ def extract_salary_range(text: str) -> list[int] | None:
 
 # 信源权重：不同来源的信息可信度不同
 SOURCE_WEIGHTS = {
-    "official": 1.0,    # 官方网站
-    "interview": 0.9,   # 面经网站（牛客、力扣）
-    "employee": 0.85,   # 员工评价（知乎、脉脉）
-    "anonymous": 0.75,  # 匿名论坛（V2EX）
+    "jd": 1.0,          # JD（官方招聘信息）
+    "official": 0.95,   # 官方网站
+    "interview": 0.85,  # 面经网站（牛客、力扣）
+    "employee": 0.8,    # 员工评价（知乎、脉脉）
+    "anonymous": 0.7,   # 匿名论坛（V2EX）
     "news": 0.6,        # 新闻/博客
     "unknown": 0.5,     # 未知来源
 }
@@ -93,6 +94,12 @@ def identify_source(url: str, title: str) -> str:
     """识别搜索结果的来源类型"""
     url_lower = url.lower()
     title_lower = title.lower()
+    
+    # JD（招聘信息）
+    if any(kw in url_lower for kw in ["zhipin", "lagou", "liepin", "boss", "job", "career", "recruit"]):
+        return "jd"
+    if any(kw in title_lower for kw in ["招聘", "职位", "岗位", "急招", "诚招"]):
+        return "jd"
     
     # 官方网站
     if any(kw in url_lower for kw in [".com/", ".cn/", "career", "jobs", "recruit"]):
@@ -125,6 +132,177 @@ def get_source_weight(url: str, title: str) -> float:
     """获取信源权重"""
     source_type = identify_source(url, title)
     return SOURCE_WEIGHTS.get(source_type, 0.5)
+
+# JD 分析功能
+JD_RISK_KEYWORDS = {
+    "高强度": ["抗压能力", "抗压", "能承受高强度", "能承受压力", "高压环境"],
+    "职责不清": ["owner意识", "主人翁意识", "自驱力", "主动性强", "多线程", "同时处理"],
+    "可能加班": ["快速响应", "响应迅速", "创业心态", "创业公司", "弹性工作", "结果导向"],
+    "画饼": ["期权激励", "未来可期", "快速发展", "成长空间大", "扁平化管理"],
+    "模糊要求": ["有责任心", "团队合作", "沟通能力强", "学习能力强"],
+}
+
+JD_TECH_KEYWORDS = {
+    "Go": ["Go", "Golang", "go语言"],
+    "Java": ["Java", "java", "Spring", "SpringBoot", "SpringCloud"],
+    "Python": ["Python", "python", "Django", "Flask", "FastAPI"],
+    "JavaScript": ["JavaScript", "JS", "TypeScript", "TS", "Node.js"],
+    "C++": ["C++", "cpp"],
+    "Rust": ["Rust", "rust"],
+    "MySQL": ["MySQL", "mysql", "SQL"],
+    "Redis": ["Redis", "redis"],
+    "PostgreSQL": ["PostgreSQL", "postgres", "PG"],
+    "MongoDB": ["MongoDB", "mongodb"],
+    "Kafka": ["Kafka", "kafka", "消息队列"],
+    "RabbitMQ": ["RabbitMQ", "rabbitmq"],
+    "Docker": ["Docker", "docker", "容器"],
+    "Kubernetes": ["Kubernetes", "K8s", "k8s", "容器编排"],
+    "AWS": ["AWS", "aws", "Amazon"],
+    "GCP": ["GCP", "gcp", "Google Cloud"],
+    "Azure": ["Azure", "azure", "微软云"],
+    "gRPC": ["gRPC", "grpc", "GRPC"],
+    "微服务": ["微服务", "microservice", "分布式"],
+    "AI/ML": ["AI", "机器学习", "深度学习", "NLP", "LLM", "大模型"],
+    "前端": ["React", "Vue", "Angular", "前端", "H5"],
+    "运维": ["运维", "DevOps", "CI/CD", "SRE", "监控"],
+    "测试": ["测试", "QA", "自动化测试", "性能测试"],
+    "产品": ["产品经理", "产品设计", "需求分析"],
+}
+
+def extract_jd_tech_stack(jd_text: str) -> list[str]:
+    """从 JD 中提取技术栈"""
+    found = []
+    text_lower = jd_text.lower()
+    for tech, keywords in JD_TECH_KEYWORDS.items():
+        for kw in keywords:
+            if kw.lower() in text_lower:
+                if tech not in found:
+                    found.append(tech)
+                break
+    return found
+
+def extract_jd_risks(jd_text: str) -> list[dict]:
+    """从 JD 中提取风险信号"""
+    risks = []
+    text_lower = jd_text.lower()
+    for risk_type, keywords in JD_RISK_KEYWORDS.items():
+        hits = []
+        for kw in keywords:
+            if kw.lower() in text_lower:
+                hits.append(kw)
+        if hits:
+            risks.append({
+                "type": risk_type,
+                "evidence": hits,
+                "evidence_count": len(hits),
+            })
+    return risks
+
+def analyze_job_dirtiness(jd_text: str) -> dict:
+    """分析岗位脏度（是否是缝合岗）"""
+    tech_stack = extract_jd_tech_stack(jd_text)
+    
+    # 分类技术栈
+    categories = {
+        "backend": ["Go", "Java", "Python", "C++", "Rust"],
+        "frontend": ["JavaScript", "前端"],
+        "ai": ["AI/ML"],
+        "devops": ["运维", "Docker", "Kubernetes"],
+        "data": ["MySQL", "Redis", "Kafka", "MongoDB"],
+        "test": ["测试"],
+    }
+    
+    matched_categories = []
+    for cat, techs in categories.items():
+        if any(t in tech_stack for t in techs):
+            matched_categories.append(cat)
+    
+    # 判断脏度
+    if len(matched_categories) >= 4:
+        job_type = "缝合岗"
+        workload_risk = "high"
+    elif len(matched_categories) == 3:
+        job_type = "多面手"
+        workload_risk = "medium"
+    elif len(matched_categories) == 2:
+        job_type = "全栈"
+        workload_risk = "medium"
+    else:
+        job_type = "专精"
+        workload_risk = "low"
+    
+    return {
+        "job_type": job_type,
+        "workload_risk": workload_risk,
+        "categories": matched_categories,
+        "tech_count": len(tech_stack),
+    }
+
+def extract_jd_requirements(jd_text: str) -> list[str]:
+    """从 JD 中提取要求"""
+    requirements = []
+    lines = jd_text.split("\n")
+    in_requirements = False
+    for line in lines:
+        line = line.strip()
+        if any(kw in line for kw in ["任职要求", "岗位要求", "要求", "必备", "需要"]):
+            in_requirements = True
+            continue
+        if in_requirements and line:
+            if any(kw in line for kw in ["职责", "工作内容", "我们提供", "福利"]):
+                in_requirements = False
+            elif len(line) > 5 and len(line) < 100:
+                requirements.append(line)
+    return requirements[:10]
+
+def extract_jd_responsibilities(jd_text: str) -> list[str]:
+    """从 JD 中提取职责"""
+    responsibilities = []
+    lines = jd_text.split("\n")
+    in_responsibilities = False
+    for line in lines:
+        line = line.strip()
+        if any(kw in line for kw in ["工作职责", "岗位职责", "职责", "工作内容", "你将"]):
+            in_responsibilities = True
+            continue
+        if in_responsibilities and line:
+            if any(kw in line for kw in ["要求", "任职", "我们提供", "福利"]):
+                in_responsibilities = False
+            elif len(line) > 5 and len(line) < 100:
+                responsibilities.append(line)
+    return responsibilities[:10]
+
+def analyze_jd(jd_text: str) -> dict:
+    """完整 JD 分析"""
+    return {
+        "tech_stack": extract_jd_tech_stack(jd_text),
+        "requirements": extract_jd_requirements(jd_text),
+        "responsibilities": extract_jd_responsibilities(jd_text),
+        "risks": extract_jd_risks(jd_text),
+        "job_dirtiness": analyze_job_dirtiness(jd_text),
+    }
+
+def calculate_resume_match(resume_skills: dict, jd_tech_stack: list[str]) -> dict:
+    """计算简历与 JD 的匹配度"""
+    resume_all = set()
+    for k in ["languages", "frameworks", "databases", "devops"]:
+        for skill in resume_skills.get(k, []):
+            resume_all.add(skill.lower())
+    
+    jd_set = set(t.lower() for t in jd_tech_stack)
+    
+    matched = resume_all & jd_set
+    missing = jd_set - resume_all
+    
+    match_score = len(matched) / len(jd_set) * 100 if jd_set else 0
+    
+    return {
+        "match_score": round(match_score, 1),
+        "matched_skills": list(matched),
+        "missing_skills": list(missing),
+        "resume_skills": list(resume_all),
+        "jd_skills": list(jd_set),
+    }
 
 # 风险标签系统：6个核心维度
 RISK_DIMENSIONS = {
@@ -417,7 +595,7 @@ def analyze_sentiment(snippets: list) -> dict:
 
     return result
 
-async def research_company(page, company: str, department: str = "", avoid_exam: bool = False) -> dict:
+async def research_company(page, company: str, department: str = "", position: str = "", avoid_exam: bool = False) -> dict:
     # 基础查询（公司级）
     queries = [
         f"{company} 工作 体验 评价",
@@ -433,6 +611,10 @@ async def research_company(page, company: str, department: str = "", avoid_exam:
             f"{company} {department} 团队 氛围",
         ])
 
+    # JD 搜索（如果指定了岗位）
+    if position:
+        queries.append(f"{company} {position} 招聘 JD")
+    
     if avoid_exam:
         queries.append(f"{company} 笔试 难度 面试")
 
@@ -466,6 +648,15 @@ async def research_company(page, company: str, department: str = "", avoid_exam:
     # 计算置信度
     confidence = calculate_confidence(all_results, sentiment)
 
+    # JD 分析
+    jd_analysis = None
+    jd_text = ""
+    for r in all_results:
+        if r.get("source_type") == "jd" and r.get("snippet"):
+            jd_text += r["snippet"] + " "
+    if jd_text.strip():
+        jd_analysis = analyze_jd(jd_text)
+
     return {
         "wlb": round(sentiment["wlb"], 1),
         "stability": round(sentiment["stability"], 1),
@@ -479,6 +670,7 @@ async def research_company(page, company: str, department: str = "", avoid_exam:
         "pros": sentiment["pros"][:3],
         "cons": sentiment["cons"][:3],
         "exam": exam,
+        "jd_analysis": jd_analysis,
         "snippets_count": len(all_results),
         "source_distribution": source_counts,
         "confidence": confidence,
@@ -543,10 +735,16 @@ async def main():
         page = await ctx.new_page()
 
         print(f"[Research] Searching {company}{' ' + department if department else ''}...", file=sys.stderr)
-        research = await research_company(page, company, department, avoid_exam)
+        research = await research_company(page, company, department, position, avoid_exam)
         scoring = score_company(skills, research, avoid_exam)
 
         await browser.close()
+
+    # 简历匹配度
+    resume_match = None
+    jd_analysis = research.get("jd_analysis")
+    if jd_analysis and jd_analysis.get("tech_stack"):
+        resume_match = calculate_resume_match(skills, jd_analysis["tech_stack"])
 
     # 生成摘要
     summary = generate_summary(company, department, research, scoring)
@@ -566,6 +764,9 @@ async def main():
         "controversial": research.get("controversial", False),
         "controversial_dimensions": research.get("controversial_dimensions", []),
         "tags": research.get("tags", []),
+        # JD 分析
+        "jd_analysis": research.get("jd_analysis"),
+        "resume_match": resume_match,
         # 摘要
         "summary": summary,
         "confidence": research.get("confidence", 0.1),
