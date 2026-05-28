@@ -921,14 +921,16 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
         lines.append("")
     
     # JD 风险
+    lines.append("## 五、JD 风险分析")
+    lines.append("")
     if jd_analysis and jd_analysis.get("risks"):
-        lines.append("## 五、JD 风险分析")
-        lines.append("")
         for risk in jd_analysis["risks"]:
             risk_type = risk.get("type", "")
             evidence = risk.get("evidence", [])
             lines.append(f"- **{risk_type}**：{', '.join(evidence)}")
-        lines.append("")
+    else:
+        lines.append("- 未发现明显 JD 风险信号")
+    lines.append("")
     
     # 总结
     lines.append("## 六、综合建议")
@@ -1004,7 +1006,7 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
     lines.append("2. **Go**：深入理解底层原理（GMP、Channel、GC）")
     lines.append("3. **系统设计**：准备2-3个系统设计案例（IM/支付/消息队列）")
     lines.append("4. **项目**：准备好项目亮点和技术难点的讲解")
-    lines.append("5. **腾讯文化**：了解腾讯的价值观和文化")
+    lines.append("5. **企业文化**：了解公司的价值观和文化")
     lines.append("")
     lines.append("---")
     lines.append(f"*报告生成时间：{output.get('timestamp', '')}*")
