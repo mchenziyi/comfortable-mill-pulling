@@ -1103,93 +1103,204 @@ def score_company(skills: dict, research: dict, avoid_exam: bool) -> dict:
     )
     return {"scores":s, "total":total, "total_max":10}
 
+def generate_comparison_report(results: list[dict]) -> str:
+    """生成多公司对比报告"""
+    if not results:
+        return "无对比数据"
+    
+    lines = []
+    lines.append("# 📊 多公司对比分析报告")
+    lines.append("")
+    
+    # 综合排名
+    sorted_results = sorted(results, key=lambda x: x.get("overall_score", 0), reverse=True)
+    
+    lines.append("## 综合排名")
+    lines.append("")
+    lines.append("| 排名 | 公司 | 岗位 | 综合评分 | WLB | 成长 | 稳定 | 福利 |")
+    lines.append("|:--:|------|------|:--:|:--:|:--:|:--:|:--:|")
+    for i, r in enumerate(sorted_results, 1):
+        company = r.get("company", "")
+        position = r.get("position", "")
+        overall = r.get("overall_score", 0)
+        wlb = r.get("wlb_score", 0)
+        growth = r.get("growth_score", 0)
+        stability = r.get("stability_score", 0)
+        perks = r.get("perks_score", 0)
+        lines.append(f"| {i} | {company} | {position} | {overall} | {wlb} | {growth} | {stability} | {perks} |")
+    lines.append("")
+    
+    # 风险对比
+    lines.append("## 风险对比")
+    lines.append("")
+    lines.append("| 公司 | 风险标签 | 争议维度 |")
+    lines.append("|------|----------|----------|")
+    for r in sorted_results:
+        company = r.get("company", "")
+        risk_tags = r.get("risk_tags", [])
+        controversial = r.get("controversial_dimensions", [])
+        tags_str = ", ".join(risk_tags) if risk_tags else "无"
+        cont_str = ", ".join(controversial) if controversial else "无"
+        lines.append(f"| {company} | {tags_str} | {cont_str} |")
+    lines.append("")
+    
+    # 技术匹配对比
+    lines.append("## 技术匹配对比")
+    lines.append("")
+    lines.append("| 公司 | 匹配度 | 已匹配 | 缺失 |")
+    lines.append("|------|:--:|------|------|")
+    for r in sorted_results:
+        company = r.get("company", "")
+        match = r.get("resume_match") or {}
+        score = match.get("match_score", 0)
+        matched = ", ".join(match.get("matched_skills", []))
+        missing = ", ".join(match.get("missing_skills", []))
+        lines.append(f"| {company} | {score}% | {matched} | {missing} |")
+    lines.append("")
+    
+    # 推荐
+    lines.append("## 综合推荐")
+    lines.append("")
+    best = sorted_results[0]
+    lines.append(f"**首选推荐：{best.get('company', '')} {best.get('position', '')}**")
+    lines.append("")
+    lines.append(f"- 综合评分：{best.get('overall_score', 0)}/10")
+    lines.append(f"- 置信度：{best.get('confidence', 0)*100:.0f}%")
+    
+    # 薪资谈判建议
+    lines.append("")
+    lines.append("## 薪资谈判建议")
+    lines.append("")
+    for r in sorted_results[:3]:
+        company = r.get("company", "")
+        negotiation = r.get("salary_negotiation", {})
+        if negotiation:
+            lines.append(f"### {company}")
+            for strategy in negotiation.get("strategies", [])[:2]:
+                lines.append(f"- {strategy}")
+            lines.append("")
+    
+    lines.append("---")
+    lines.append(f"*报告生成时间：{sorted_results[0].get('timestamp', '')}*")
+    
+    return "\n".join(lines)
+
 async def main():
     args = sys.argv[1:]
     if len(args) < 2:
-        print(json.dumps({"error":"Usage: python search_jobs.py <resume> <company> [department] [--avoid-exam]"}))
+        print(json.dumps({"error":"Usage: python search_jobs.py <resume> <company> [department] [position] [--avoid-exam] [--compare <company2> <company3> ...]"}))
         sys.exit(1)
 
-    resume_path, company = args[0], args[1]
-    department = ""
-    position = ""
+    resume_path = args[0]
     avoid_exam = "--avoid-exam" in args
-
-    # 解析部门和岗位参数
-    non_flag_args = [a for a in args[2:] if not a.startswith("--")]
-    if len(non_flag_args) >= 2:
-        department = non_flag_args[0]
-        position = non_flag_args[1]
-    elif len(non_flag_args) == 1:
-        # 如果只有一个参数，判断是部门还是岗位
-        # 简单启发：包含"部"字的是部门，否则是岗位
-        if "部" in non_flag_args[0] or "组" in non_flag_args[0] or "团队" in non_flag_args[0]:
-            department = non_flag_args[0]
-        else:
-            position = non_flag_args[0]
+    compare_mode = "--compare" in args
+    
+    # 解析公司列表
+    companies = []
+    i = 1
+    while i < len(args) and not args[i].startswith("--"):
+        companies.append(args[i])
+        i += 1
+    
+    # 如果有 --compare，获取后面的公司
+    if compare_mode:
+        compare_idx = args.index("--compare")
+        for j in range(compare_idx + 1, len(args)):
+            if not args[j].startswith("--"):
+                companies.append(args[j])
+    
+    if not companies:
+        print(json.dumps({"error":"请指定至少一个公司"}))
+        sys.exit(1)
 
     resume_text = load_resume(resume_path)
     skills = extract_skills_from_resume(resume_text)
-    dept_info = f" | 部门: {department}" if department else ""
-    print(f"[Analysis] {company}{dept_info} | Skills: {skills['languages']}", file=sys.stderr)
+    print(f"[Analysis] Skills: {skills['languages']}", file=sys.stderr)
 
+    # 分析每个公司
+    all_results = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(channel="chrome", headless=True, args=["--no-sandbox"])
         ctx = await browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36", locale="zh-CN")
         page = await ctx.new_page()
 
-        print(f"[Research] Searching {company}{' ' + department if department else ''}...", file=sys.stderr)
-        research = await research_company(page, company, department, position, avoid_exam)
-        scoring = score_company(skills, research, avoid_exam)
+        for company in companies:
+            print(f"[Research] Searching {company}...", file=sys.stderr)
+            research = await research_company(page, company, "", "", avoid_exam)
+            scoring = score_company(skills, research, avoid_exam)
+            
+            # 简历匹配度
+            resume_match = None
+            jd_analysis = research.get("jd_analysis")
+            if jd_analysis and jd_analysis.get("tech_stack"):
+                resume_match = calculate_resume_match(skills, jd_analysis["tech_stack"])
+
+            # 薪资谈判
+            salary_negotiation = generate_salary_negotiation(company, research, skills)
+
+            # 生成摘要
+            summary = generate_summary(company, "", research, scoring)
+
+            output = {
+                "overall_score": scoring["total"],
+                "wlb_score": research.get("wlb", 5),
+                "growth_score": research.get("growth", 5),
+                "stability_score": research.get("stability", 5),
+                "perks_score": research.get("perks", 0),
+                "tech_match_score": scoring["scores"].get("tech_match", 0),
+                "risk_tags": research.get("risk_tags", []),
+                "risk_details": research.get("risk_details", []),
+                "controversial": research.get("controversial", False),
+                "controversial_dimensions": research.get("controversial_dimensions", []),
+                "tags": research.get("tags", []),
+                "jd_analysis": research.get("jd_analysis"),
+                "resume_match": resume_match,
+                "salary_negotiation": salary_negotiation,
+                "summary": summary,
+                "confidence": research.get("confidence", 0.1),
+                "company": company,
+                "department": "",
+                "position": "",
+                "skills_found": skills,
+                "avoid_exam": avoid_exam,
+                "exam": research.get("exam", "未评估"),
+                "pros": research.get("pros", []),
+                "cons": research.get("cons", []),
+                "source_distribution": research.get("source_distribution", {}),
+                "snippets_count": research.get("snippets_count", 0),
+                "timestamp": datetime.now().isoformat(),
+            }
+            all_results.append(output)
+            
+            # 保存单个公司报告
+            reports_dir = r"D:\GoProject\src\superAgent\reports"
+            os.makedirs(reports_dir, exist_ok=True)
+            json_path = os.path.join(reports_dir, f"{company}-分析报告.json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(output, f, ensure_ascii=False, indent=2)
+            
+            md_path = os.path.join(reports_dir, f"{company}-分析报告.md")
+            md_content = generate_markdown_report(output, skills)
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(md_content)
+            
+            print(f"[Saved] {md_path}", file=sys.stderr)
 
         await browser.close()
 
-    # 简历匹配度
-    resume_match = None
-    jd_analysis = research.get("jd_analysis")
-    if jd_analysis and jd_analysis.get("tech_stack"):
-        resume_match = calculate_resume_match(skills, jd_analysis["tech_stack"])
+    # 如果是对比模式，生成对比报告
+    if compare_mode and len(all_results) > 1:
+        comparison_md = generate_comparison_report(all_results)
+        comparison_path = os.path.join(reports_dir, "对比分析报告.md")
+        with open(comparison_path, "w", encoding="utf-8") as f:
+            f.write(comparison_md)
+        print(f"[Saved] {comparison_path}", file=sys.stderr)
 
-    # 生成摘要
-    summary = generate_summary(company, department, research, scoring)
-
-    # 固定输出 Schema
-    output = {
-        # 核心评分
-        "overall_score": scoring["total"],
-        "wlb_score": research.get("wlb", 5),
-        "growth_score": research.get("growth", 5),
-        "stability_score": research.get("stability", 5),
-        "perks_score": research.get("perks", 0),
-        "tech_match_score": scoring["scores"].get("tech_match", 0),
-        # 风险与标签
-        "risk_tags": research.get("risk_tags", []),
-        "risk_details": research.get("risk_details", []),
-        "controversial": research.get("controversial", False),
-        "controversial_dimensions": research.get("controversial_dimensions", []),
-        "tags": research.get("tags", []),
-        # JD 分析
-        "jd_analysis": research.get("jd_analysis"),
-        "resume_match": resume_match,
-        # 摘要
-        "summary": summary,
-        "confidence": research.get("confidence", 0.1),
-        # 详细信息
-        "company": company,
-        "department": department,
-        "position": position,
-        "skills_found": skills,
-        "avoid_exam": avoid_exam,
-        "exam": research.get("exam", "未评估"),
-        "pros": research.get("pros", []),
-        "cons": research.get("cons", []),
-        "source_distribution": research.get("source_distribution", {}),
-        "snippets_count": research.get("snippets_count", 0),
-        "timestamp": datetime.now().isoformat(),
-    }
-
-    # 保存到 reports 目录
-    reports_dir = r"D:\GoProject\src\superAgent\reports"
-    os.makedirs(reports_dir, exist_ok=True)
+    # 输出 JSON
+    if len(all_results) == 1:
+        print(json.dumps(all_results[0], ensure_ascii=False, indent=2))
+    else:
+        print(json.dumps({"companies": all_results, "comparison": True}, ensure_ascii=False, indent=2))
 def generate_markdown_report(output: dict, skills: dict) -> str:
     """生成 Markdown 格式的分析报告"""
     company = output.get("company", "")
