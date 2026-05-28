@@ -238,6 +238,59 @@ def analyze_job_dirtiness(jd_text: str) -> dict:
         "tech_count": len(tech_stack),
     }
 
+def analyze_job_level(jd_text: str) -> dict:
+    """分析岗位真实级别"""
+    text_lower = jd_text.lower()
+    
+    # 级别关键词
+    level_keywords = {
+        "初级": ["初级", "初级开发", "应届", "校招", "实习", "1-3年", "1~3年", "1年以上"],
+        "中级": ["中级", "中级开发", "3-5年", "3~5年", "3年以上", "经验"],
+        "高级": ["高级", "高级开发", "资深", "5-10年", "5~10年", "5年以上", "架构"],
+        "专家": ["专家", "技术专家", "技术架构", "10年以上", "10年+"],
+        "全栈": ["全栈", "fullstack", "full stack"],
+        "架构": ["架构师", "架构", "architect"],
+    }
+    
+    # 检测级别
+    detected_levels = []
+    for level, keywords in level_keywords.items():
+        for kw in keywords:
+            if kw in text_lower:
+                detected_levels.append(level)
+                break
+    
+    # 判断主要级别
+    if not detected_levels:
+        level = "未知"
+    elif "专家" in detected_levels or "架构" in detected_levels:
+        level = "高级+"
+    elif "高级" in detected_levels:
+        level = "高级"
+    elif "中级" in detected_levels:
+        level = "中级"
+    elif "初级" in detected_levels:
+        level = "初级"
+    elif "全栈" in detected_levels:
+        level = "全栈"
+    else:
+        level = "中级"  # 默认
+    
+    # 检测是否虚标（要求高但描述简单）
+    senior_keywords = ["架构", "设计", "带团队", "技术选型", "疑难问题"]
+    has_senior_content = any(kw in text_lower for kw in senior_keywords)
+    
+    is_real_level = True
+    if level in ["高级", "专家", "高级+"] and not has_senior_content:
+        is_real_level = False  # 可能虚标
+    
+    return {
+        "level": level,
+        "detected_levels": detected_levels,
+        "is_real_level": is_real_level,
+        "warning": "级别可能虚标" if not is_real_level else "",
+    }
+
 def extract_jd_requirements(jd_text: str) -> list[str]:
     """从 JD 中提取要求"""
     requirements = []
@@ -280,6 +333,7 @@ def analyze_jd(jd_text: str) -> dict:
         "responsibilities": extract_jd_responsibilities(jd_text),
         "risks": extract_jd_risks(jd_text),
         "job_dirtiness": analyze_job_dirtiness(jd_text),
+        "job_level": analyze_job_level(jd_text),
     }
 
 def calculate_resume_match(resume_skills: dict, jd_tech_stack: list[str]) -> dict:
@@ -888,7 +942,7 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
         lines.append(f"- **匹配度**：{match_score:.1f}%")
         lines.append("")
     
-    # 岗位脏度
+    # 岗位类型
     if job_dirtiness:
         job_type = job_dirtiness.get("job_type", "")
         workload_risk = job_dirtiness.get("workload_risk", "")
@@ -896,6 +950,16 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
         lines.append("")
         lines.append(f"- **岗位类型**：{job_type}")
         lines.append(f"- **工作负荷风险**：{workload_risk}")
+        
+        # 岗位级别
+        job_level = jd_analysis.get("job_level", {}) if jd_analysis else {}
+        if job_level:
+            level = job_level.get("level", "")
+            is_real = job_level.get("is_real_level", True)
+            warning = job_level.get("warning", "")
+            lines.append(f"- **岗位级别**：{level}")
+            if not is_real:
+                lines.append(f"- ⚠️ **级别预警**：{warning}")
         lines.append("")
     
     # 信源分布
