@@ -1011,11 +1011,13 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
     tech_match = output.get("tech_match_score", 0)
     matched = output.get("resume_match", {}).get("matched_skills", [])
     missing = output.get("resume_match", {}).get("missing_skills", [])
+    match_score = output.get("resume_match", {}).get("match_score", 0)
     
     # 风险信息
     risk_tags = output.get("risk_tags", [])
     risk_details = output.get("risk_details", [])
     controversial = output.get("controversial", False)
+    controversial_dims = output.get("controversial_dimensions", [])
     
     # 评分
     wlb = output.get("wlb_score", 5)
@@ -1027,6 +1029,11 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
     jd_analysis = output.get("jd_analysis")
     jd_tech = jd_analysis.get("tech_stack", []) if jd_analysis else []
     job_dirtiness = jd_analysis.get("job_dirtiness", {}) if jd_analysis else {}
+    job_level = jd_analysis.get("job_level", {}) if jd_analysis else {}
+    jd_risks = jd_analysis.get("risks", []) if jd_analysis else []
+    
+    # 面试智能
+    interview_intel = output.get("interview_intelligence")
     
     # 生成报告
     lines = []
@@ -1045,34 +1052,40 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
     lines.append(f"- 综合评分：{overall_score}/10")
     lines.append("")
     
-    # 评分表
+    # 评分详情表
     lines.append("### 评分详情")
     lines.append("")
-    lines.append("| 维度 | 评分 | 说明 |")
-    lines.append("|------|:--:|------|")
-    lines.append(f"| 技术匹配 | {tech_match}/10 | 简历技能与JD匹配度 |")
-    lines.append(f"| WLB | {wlb}/10 | 工作生活平衡 |")
-    lines.append(f"| 成长性 | {growth}/10 | 晋升空间与技术成长 |")
-    lines.append(f"| 稳定性 | {stability}/10 | 公司稳定性 |")
-    lines.append(f"| 福利 | {perks}/10 | 生活福利 |")
+    lines.append("| 维度 | 评分 | 权重 | 加权分 | 说明 |")
+    lines.append("|------|:--:|:--:|:--:|------|")
+    lines.append(f"| 技术匹配 | {tech_match}/10 | 30% | {tech_match*0.3:.1f} | 简历技能与JD匹配度 |")
+    lines.append(f"| WLB | {wlb}/10 | 25% | {wlb*0.25:.1f} | 工作生活平衡 |")
+    lines.append(f"| 福利 | {perks}/10 | 20% | {perks*0.2:.1f} | 生活福利 |")
+    lines.append(f"| 稳定性 | {stability}/10 | 15% | {stability*0.15:.1f} | 公司稳定性 |")
+    lines.append(f"| 成长性 | {growth}/10 | 10% | {growth*0.1:.1f} | 晋升空间与技术成长 |")
+    lines.append(f"| **综合** | **{overall_score}/10** | **100%** | **{overall_score:.1f}** | |")
     lines.append("")
     
-    # 风险标签
-    if risk_tags:
-        lines.append("## 二、风险提示")
+    # 风险详情
+    if risk_details:
+        lines.append("## 二、风险详情")
         lines.append("")
+        lines.append("| 风险维度 | 负面证据 | 正面证据 | 状态 |")
+        lines.append("|----------|:--:|:--:|------|")
         for detail in risk_details:
             dim = detail.get("label", "")
-            evidence = detail.get("evidence_count", 0)
-            controversial_flag = "⚠️ 争议" if detail.get("controversial") else ""
-            lines.append(f"- **{dim}**：{evidence}条证据 {controversial_flag}")
-        if controversial:
-            lines.append("")
-            lines.append("> ⚠️ 该岗位存在争议信息，建议面试时重点确认")
+            neg = detail.get("evidence_count", 0)
+            pos = detail.get("positive_count", 0)
+            is_controversial = detail.get("controversial", False)
+            status = "⚠️ 争议" if is_controversial else ("🔴 风险" if neg > pos else "🟢 正常")
+            lines.append(f"| {dim} | {neg}条 | {pos}条 | {status} |")
         lines.append("")
+        if controversial:
+            lines.append(f"> ⚠️ 争议维度：{', '.join(controversial_dims)}")
+            lines.append("> 建议面试时重点确认这些维度的真实情况")
+            lines.append("")
     
-    # 技术匹配
-    lines.append("## 三、技术匹配分析")
+    # 技术匹配详情
+    lines.append("## 三、技术匹配详情")
     lines.append("")
     lines.append("### 你的技能栈")
     lines.append("")
@@ -1095,37 +1108,29 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
             lines.append(f"- ✅ **已匹配**：{', '.join(matched)}")
         if missing:
             lines.append(f"- ❌ **缺失**：{', '.join(missing)}")
-        match_score = output.get("resume_match", {}).get("match_score", 0)
         lines.append(f"- **匹配度**：{match_score:.1f}%")
         lines.append("")
     
-    # 岗位类型
+    # 岗位详情
+    lines.append("### 岗位详情")
+    lines.append("")
     if job_dirtiness:
-        job_type = job_dirtiness.get("job_type", "")
-        workload_risk = job_dirtiness.get("workload_risk", "")
-        lines.append("### 岗位类型")
-        lines.append("")
-        lines.append(f"- **岗位类型**：{job_type}")
-        lines.append(f"- **工作负荷风险**：{workload_risk}")
-        
-        # 岗位级别
-        job_level = jd_analysis.get("job_level", {}) if jd_analysis else {}
-        if job_level:
-            level = job_level.get("level", "")
-            is_real = job_level.get("is_real_level", True)
-            warning = job_level.get("warning", "")
-            lines.append(f"- **岗位级别**：{level}")
-            if not is_real:
-                lines.append(f"- ⚠️ **级别预警**：{warning}")
-        lines.append("")
+        lines.append(f"- **岗位类型**：{job_dirtiness.get('job_type', '未知')}")
+        lines.append(f"- **工作负荷风险**：{job_dirtiness.get('workload_risk', '未知')}")
+    if job_level:
+        lines.append(f"- **岗位级别**：{job_level.get('level', '未知')}")
+        if not job_level.get("is_real_level", True):
+            lines.append(f"- ⚠️ **级别预警**：{job_level.get('warning', '')}")
+    lines.append("")
     
     # 信源分布
     source_dist = output.get("source_distribution", {})
     if source_dist:
         lines.append("## 四、数据来源")
         lines.append("")
-        lines.append("| 来源类型 | 数量 |")
-        lines.append("|----------|:--:|")
+        lines.append("| 来源类型 | 数量 | 占比 |")
+        lines.append("|----------|:--:|:--:|")
+        total = sum(source_dist.values())
         source_names = {
             "jd": "招聘信息",
             "official": "官方网站",
@@ -1137,15 +1142,16 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
         }
         for src, count in source_dist.items():
             name = source_names.get(src, src)
-            lines.append(f"| {name} | {count} |")
-        lines.append(f"| **总计** | **{sum(source_dist.values())}** |")
+            pct = count/total*100 if total > 0 else 0
+            lines.append(f"| {name} | {count} | {pct:.0f}% |")
+        lines.append(f"| **总计** | **{total}** | **100%** |")
         lines.append("")
     
     # JD 风险
     lines.append("## 五、JD 风险分析")
     lines.append("")
-    if jd_analysis and jd_analysis.get("risks"):
-        for risk in jd_analysis["risks"]:
+    if jd_risks:
+        for risk in jd_risks:
             risk_type = risk.get("type", "")
             evidence = risk.get("evidence", [])
             lines.append(f"- **{risk_type}**：{', '.join(evidence)}")
@@ -1163,15 +1169,18 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
     else:
         lines.append("**谨慎考虑，建议面试时重点确认风险点**")
     lines.append("")
+    lines.append("### 核心指标")
+    lines.append("")
     lines.append(f"- 技术栈匹配度：{tech_match}/10")
     lines.append(f"- 综合评分：{overall_score}/10")
     lines.append(f"- 置信度：{confidence*100:.0f}%")
     lines.append("")
     
     if risk_tags:
-        lines.append("**需要确认的问题**：")
+        lines.append("### 需要确认的问题")
+        lines.append("")
         for tag in risk_tags:
-            lines.append(f"- {tag}")
+            lines.append(f"- ⚠️ {tag}")
         lines.append("")
     
     # 面经信息
