@@ -1,0 +1,101 @@
+{
+  "company": "字节跳动",
+  "department": "",
+  "position": "Golang开发",
+  "overall_score": 6.8,
+  "wlb_score": 2.5,
+  "growth_score": 8.0,
+  "stability_score": 6.0,
+  "perks_score": 4.5,
+  "tech_match_score": 10,
+  "risk_tags": [
+    "WLB风险",
+    "稳定风险"
+  ],
+  "risk_details": [
+    {
+      "dimension": "WLB",
+      "label": "WLB风险",
+      "evidence_count": 20,
+      "positive_count": 5,
+      "controversial": true
+    },
+    {
+      "dimension": "稳定性",
+      "label": "稳定风险",
+      "evidence_count": 8,
+      "positive_count": 2,
+      "controversial": true
+    }
+  ],
+  "controversial": true,
+  "controversial_dimensions": [
+    "WLB",
+    "稳定性"
+  ],
+  "tags": [
+    "加班重",
+    "WLB好",
+    "高薪资",
+    "晋升快",
+    "免费三餐",
+    "下午茶",
+    "房补"
+  ],
+  "jd_analysis": {
+    "tech_stack": [
+      "Go",
+      "微服务",
+      "MySQL",
+      "Redis",
+      "Kafka"
+    ],
+    "risks": [
+      {
+        "type": "高强度",
+        "evidence": [
+          "抗压能力",
+          "能承受高强度工作"
+        ]
+      },
+      {
+        "type": "职责不清",
+        "evidence": [
+          "owner意识",
+          "自驱力"
+        ]
+      }
+    ],
+    "job_dirtiness": {
+      "job_type": "专精",
+      "workload_risk": "low"
+    },
+    "job_level": {
+      "level": "高级",
+      "is_real_level": true,
+      "warning": ""
+    }
+  },
+  "resume_match": {
+    "match_score": 70.0,
+    "matched_skills": [
+      "go",
+      "mysql",
+      "redis",
+      "kafka"
+    ],
+    "missing_skills": [
+      "微服务"
+    ]
+  },
+  "summary": "字节跳动 推荐，总分6.8/10，高薪资但加班多，需注意：WLB风险",
+  "confidence": 1.0,
+  "source_distribution": {
+    "jd": 15,
+    "interview": 10,
+    "employee": 12,
+    "official": 3
+  },
+  "snippets_count": 40,
+  "timestamp": "2026-05-28T12:00:00"
+}
