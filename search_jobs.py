@@ -787,13 +787,190 @@ async def main():
     # 保存到 reports 目录
     reports_dir = r"D:\GoProject\src\superAgent\reports"
     os.makedirs(reports_dir, exist_ok=True)
-    dept_part = f"-{department}" if department else ""
+def generate_markdown_report(output: dict, skills: dict) -> str:
+    """生成 Markdown 格式的分析报告"""
+    company = output.get("company", "")
+    department = output.get("department", "")
+    position = output.get("position", "")
+    overall_score = output.get("overall_score", 0)
+    summary = output.get("summary", "")
+    confidence = output.get("confidence", 0.1)
+    
+    # 技术栈信息
+    tech_match = output.get("tech_match_score", 0)
+    matched = output.get("resume_match", {}).get("matched_skills", [])
+    missing = output.get("resume_match", {}).get("missing_skills", [])
+    
+    # 风险信息
+    risk_tags = output.get("risk_tags", [])
+    risk_details = output.get("risk_details", [])
+    controversial = output.get("controversial", False)
+    
+    # 评分
+    wlb = output.get("wlb_score", 5)
+    growth = output.get("growth_score", 5)
+    stability = output.get("stability_score", 5)
+    perks = output.get("perks_score", 0)
+    
+    # JD 分析
+    jd_analysis = output.get("jd_analysis")
+    jd_tech = jd_analysis.get("tech_stack", []) if jd_analysis else []
+    job_dirtiness = jd_analysis.get("job_dirtiness", {}) if jd_analysis else {}
+    
+    # 生成报告
+    lines = []
+    
+    # 标题
+    dept_info = f" {department}" if department else ""
+    lines.append(f"# 📊 {company}{dept_info} {position} 求职分析报告")
+    lines.append("")
+    
+    # 摘要
+    lines.append("## 一、综合评估")
+    lines.append("")
+    lines.append(f"**{summary}**")
+    lines.append("")
+    lines.append(f"- 置信度：{confidence*100:.0f}%")
+    lines.append(f"- 综合评分：{overall_score}/10")
+    lines.append("")
+    
+    # 评分表
+    lines.append("### 评分详情")
+    lines.append("")
+    lines.append("| 维度 | 评分 | 说明 |")
+    lines.append("|------|:--:|------|")
+    lines.append(f"| 技术匹配 | {tech_match}/10 | 简历技能与JD匹配度 |")
+    lines.append(f"| WLB | {wlb}/10 | 工作生活平衡 |")
+    lines.append(f"| 成长性 | {growth}/10 | 晋升空间与技术成长 |")
+    lines.append(f"| 稳定性 | {stability}/10 | 公司稳定性 |")
+    lines.append(f"| 福利 | {perks}/10 | 生活福利 |")
+    lines.append("")
+    
+    # 风险标签
+    if risk_tags:
+        lines.append("## 二、风险提示")
+        lines.append("")
+        for detail in risk_details:
+            dim = detail.get("label", "")
+            evidence = detail.get("evidence_count", 0)
+            controversial_flag = "⚠️ 争议" if detail.get("controversial") else ""
+            lines.append(f"- **{dim}**：{evidence}条证据 {controversial_flag}")
+        if controversial:
+            lines.append("")
+            lines.append("> ⚠️ 该岗位存在争议信息，建议面试时重点确认")
+        lines.append("")
+    
+    # 技术匹配
+    lines.append("## 三、技术匹配分析")
+    lines.append("")
+    lines.append("### 你的技能栈")
+    lines.append("")
+    lines.append(f"- **语言**：{', '.join(skills.get('languages', []))}")
+    lines.append(f"- **框架**：{', '.join(skills.get('frameworks', []))}")
+    lines.append(f"- **数据库**：{', '.join(skills.get('databases', []))}")
+    lines.append(f"- **DevOps**：{', '.join(skills.get('devops', []))}")
+    lines.append("")
+    
+    if jd_tech:
+        lines.append("### JD 要求的技术栈")
+        lines.append("")
+        lines.append(f"- {', '.join(jd_tech)}")
+        lines.append("")
+    
+    if matched or missing:
+        lines.append("### 匹配度分析")
+        lines.append("")
+        if matched:
+            lines.append(f"- ✅ **已匹配**：{', '.join(matched)}")
+        if missing:
+            lines.append(f"- ❌ **缺失**：{', '.join(missing)}")
+        match_score = output.get("resume_match", {}).get("match_score", 0)
+        lines.append(f"- **匹配度**：{match_score:.1f}%")
+        lines.append("")
+    
+    # 岗位脏度
+    if job_dirtiness:
+        job_type = job_dirtiness.get("job_type", "")
+        workload_risk = job_dirtiness.get("workload_risk", "")
+        lines.append("### 岗位类型")
+        lines.append("")
+        lines.append(f"- **岗位类型**：{job_type}")
+        lines.append(f"- **工作负荷风险**：{workload_risk}")
+        lines.append("")
+    
+    # 信源分布
+    source_dist = output.get("source_distribution", {})
+    if source_dist:
+        lines.append("## 四、数据来源")
+        lines.append("")
+        lines.append("| 来源类型 | 数量 |")
+        lines.append("|----------|:--:|")
+        source_names = {
+            "jd": "招聘信息",
+            "official": "官方网站",
+            "interview": "面经网站",
+            "employee": "员工评价",
+            "anonymous": "匿名论坛",
+            "news": "新闻媒体",
+            "unknown": "其他",
+        }
+        for src, count in source_dist.items():
+            name = source_names.get(src, src)
+            lines.append(f"| {name} | {count} |")
+        lines.append(f"| **总计** | **{sum(source_dist.values())}** |")
+        lines.append("")
+    
+    # JD 风险
+    if jd_analysis and jd_analysis.get("risks"):
+        lines.append("## 五、JD 风险分析")
+        lines.append("")
+        for risk in jd_analysis["risks"]:
+            risk_type = risk.get("type", "")
+            evidence = risk.get("evidence", [])
+            lines.append(f"- **{risk_type}**：{', '.join(evidence)}")
+        lines.append("")
+    
+    # 总结
+    lines.append("## 六、综合建议")
+    lines.append("")
+    if overall_score >= 7:
+        lines.append("**强烈推荐面试**")
+    elif overall_score >= 5:
+        lines.append("**推荐面试，但需关注风险点**")
+    else:
+        lines.append("**谨慎考虑，建议面试时重点确认风险点**")
+    lines.append("")
+    lines.append(f"- 技术栈匹配度：{tech_match}/10")
+    lines.append(f"- 综合评分：{overall_score}/10")
+    lines.append(f"- 置信度：{confidence*100:.0f}%")
+    lines.append("")
+    
+    if risk_tags:
+        lines.append("**需要确认的问题**：")
+        for tag in risk_tags:
+            lines.append(f"- {tag}")
+        lines.append("")
+    
+    lines.append("---")
+    lines.append(f"*报告生成时间：{output.get('timestamp', '')}*")
+    lines.append(f"*数据来源：实时搜索（{output.get('snippets_count', 0)}条摘要）*")
+    
+    return "\n".join(lines)
     pos_part = f"-{position}" if position else ""
-    filename = f"{company}{dept_part}{pos_part}-分析报告.json"
-    filepath = os.path.join(reports_dir, filename)
-    with open(filepath, "w", encoding="utf-8") as f:
+    base_name = f"{company}{dept_part}{pos_part}-分析报告"
+    
+    # 保存 JSON（给程序用）
+    json_path = os.path.join(reports_dir, f"{base_name}.json")
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
-    print(f"[Saved] {filepath}", file=sys.stderr)
+    print(f"[Saved] {json_path}", file=sys.stderr)
+    
+    # 保存 Markdown（给人看）
+    md_path = os.path.join(reports_dir, f"{base_name}.md")
+    md_content = generate_markdown_report(output, skills)
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md_content)
+    print(f"[Saved] {md_path}", file=sys.stderr)
 
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
