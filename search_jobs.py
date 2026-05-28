@@ -358,6 +358,150 @@ def calculate_resume_match(resume_skills: dict, jd_tech_stack: list[str]) -> dic
         "jd_skills": list(jd_set),
     }
 
+# Interview Intelligence 模块
+def analyze_interview_content(interview_texts: list[str]) -> dict:
+    """分析面试内容，提取面试智能信息"""
+    all_text = " ".join(interview_texts).lower()
+    
+    # 面试轮次
+    round_patterns = [
+        (r'一面|第一轮|初面', "一面"),
+        (r'二面|第二轮', "二面"),
+        (r'三面|第三轮|总监面', "三面"),
+        (r'四面|第四轮|VP面|HR面', "HR面/终面"),
+        (r'五面|第五轮', "五面"),
+    ]
+    rounds = []
+    for pat, name in round_patterns:
+        if re.search(pat, all_text):
+            rounds.append(name)
+    
+    # 高频问题提取
+    question_patterns = [
+        r'(?:问了|问到|问的|问题)[：:]?\s*([^\n。]{5,50})',
+        r'面试题[：:]?\s*([^\n。]{5,50})',
+        r'(?:手撕|手写|实现)[：:]?\s*([^\n。]{5,30})',
+    ]
+    questions = []
+    for pat in question_patterns:
+        matches = re.findall(pat, all_text)
+        for m in matches:
+            if len(m) > 5 and m not in questions:
+                questions.append(m.strip())
+    
+    # 算法难度评估
+    algo_hard = ['hard', '很难', '困难', '动态规划', '图论', '回溯', '贪心', 'ACM', '竞赛']
+    algo_medium = ['中等', 'medium', '链表', '树', '二叉树', '哈希', '排序', '搜索']
+    algo_easy = ['简单', 'easy', '基础', 'leetcode', 'leetcode简单']
+    
+    hard_count = sum(1 for kw in algo_hard if kw in all_text)
+    medium_count = sum(1 for kw in algo_medium if kw in all_text)
+    easy_count = sum(1 for kw in algo_easy if kw in all_text)
+    
+    if hard_count >= 2:
+        coding_difficulty = "困难"
+    elif hard_count >= 1 or medium_count >= 3:
+        coding_difficulty = "中等偏难"
+    elif medium_count >= 1:
+        coding_difficulty = "中等"
+    elif easy_count >= 1:
+        coding_difficulty = "简单"
+    else:
+        coding_difficulty = "未知"
+    
+    # 系统设计重点
+    design_keywords = {
+        "高并发": ["高并发", "高流量", "QPS", "TPS", "限流", "熔断"],
+        "分布式": ["分布式", "微服务", "服务拆分", "服务治理"],
+        "数据密集": ["大数据", "数据仓库", "数据 pipeline", "实时计算"],
+        "存储": ["存储", "数据库设计", "分库分表", "读写分离"],
+        "缓存": ["缓存", "Redis", "缓存穿透", "缓存雪崩"],
+        "消息队列": ["消息队列", "MQ", "Kafka", "RabbitMQ", "异步"],
+        "安全": ["安全", "鉴权", "加密", "防护"],
+    }
+    system_design_focus = []
+    for focus, keywords in design_keywords.items():
+        if any(kw in all_text for kw in keywords):
+            system_design_focus.append(focus)
+    
+    # 项目深挖程度
+    project_deep_keywords = ["项目深挖", "项目细节", "项目难点", "项目亮点", "项目复盘", "项目架构"]
+    project_deep_dive = any(kw in all_text for kw in project_deep_keywords)
+    
+    # 高频技术栈
+    tech_keywords = {
+        "Go": ["go", "golang", "goroutine", "channel", "context"],
+        "Java": ["java", "spring", "jvm", "并发"],
+        "Redis": ["redis", "缓存", "过期", "持久化"],
+        "MySQL": ["mysql", "sql", "索引", "事务", "分库分表"],
+        "Kafka": ["kafka", "消息队列", "mq", "异步"],
+        "微服务": ["微服务", "服务拆分", "服务治理", "grpc"],
+        "Docker/K8s": ["docker", "k8s", "kubernetes", "容器"],
+        "设计模式": ["设计模式", "单例", "工厂", "观察者"],
+        "算法": ["算法", "数据结构", "leetcode"],
+    }
+    tech_stack = []
+    for tech, keywords in tech_keywords.items():
+        if any(kw in all_text for kw in keywords):
+            tech_stack.append(tech)
+    
+    # 面试风格推断
+    style_signals = {
+        "高压": ["压力面", "连续追问", "打破砂锅", "深挖", "挑战", "质疑"],
+        "偏基础": ["基础", "八股文", "背诵", "概念", "原理"],
+        "偏业务": ["业务场景", "业务理解", "产品思维", "用户", "需求"],
+        "偏算法": ["算法", "手撕", "代码", "编程", "leetcode"],
+        "偏系统设计": ["系统设计", "架构", "方案", "技术选型"],
+    }
+    interview_style = []
+    for style, keywords in style_signals.items():
+        if any(kw in all_text for kw in keywords):
+            interview_style.append(style)
+    
+    # 团队类型推断
+    team_type = "未知"
+    infra_keywords = ["基础设施", "中间件", "存储", "运维", "devops", "sre", "平台"]
+    backend_keywords = ["后端", "服务端", "api", "接口", "微服务"]
+    business_keywords = ["业务", "产品", "需求", "用户", "场景"]
+    
+    infra_count = sum(1 for kw in infra_keywords if kw in all_text)
+    backend_count = sum(1 for kw in backend_keywords if kw in all_text)
+    business_count = sum(1 for kw in business_keywords if kw in all_text)
+    
+    if infra_count >= 2:
+        team_type = "基础设施团队"
+    elif backend_count >= 2:
+        team_type = "后端服务团队"
+    elif business_count >= 2:
+        team_type = "业务驱动团队"
+    
+    # 重复信号
+    repeated_signals = []
+    if "加班" in all_text or "996" in all_text:
+        repeated_signals.append("加班频繁")
+    if "裁员" in all_text or "优化" in all_text:
+        repeated_signals.append("裁员风险")
+    if "晋升" in all_text:
+        repeated_signals.append("晋升相关")
+    if "薪资" in all_text or "待遇" in all_text:
+        repeated_signals.append("薪资讨论")
+    
+    # 置信度
+    confidence = min(len(interview_texts) / 10, 1.0)
+    
+    return {
+        "interview_rounds": rounds,
+        "top_questions": questions[:10],
+        "coding_difficulty": coding_difficulty,
+        "project_deep_dive": project_deep_dive,
+        "system_design_focus": system_design_focus,
+        "tech_stack_mentioned": tech_stack,
+        "interview_style": interview_style,
+        "team_type": team_type,
+        "repeated_signals": repeated_signals,
+        "confidence": round(confidence, 2),
+    }
+
 # 风险标签系统：6个核心维度
 RISK_DIMENSIONS = {
     "WLB": [
@@ -669,6 +813,11 @@ async def research_company(page, company: str, department: str = "", position: s
     if position:
         queries.append(f"{company} {position} 招聘 JD")
     
+    # 面经搜索
+    queries.append(f"{company} 面经 面试题")
+    if position:
+        queries.append(f"{company} {position} 面试 面经")
+    
     if avoid_exam:
         queries.append(f"{company} 笔试 难度 面试")
 
@@ -711,6 +860,13 @@ async def research_company(page, company: str, department: str = "", position: s
     if jd_text.strip():
         jd_analysis = analyze_jd(jd_text)
 
+    # 面试智能分析
+    interview_texts = []
+    for r in all_results:
+        if r.get("source_type") == "interview" and r.get("snippet"):
+            interview_texts.append(r["snippet"])
+    interview_intelligence = analyze_interview_content(interview_texts) if interview_texts else None
+
     return {
         "wlb": round(sentiment["wlb"], 1),
         "stability": round(sentiment["stability"], 1),
@@ -725,6 +881,7 @@ async def research_company(page, company: str, department: str = "", position: s
         "cons": sentiment["cons"][:3],
         "exam": exam,
         "jd_analysis": jd_analysis,
+        "interview_intelligence": interview_intelligence,
         "snippets_count": len(all_results),
         "source_distribution": source_counts,
         "confidence": confidence,
@@ -1018,53 +1175,77 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
         lines.append("")
     
     # 面经信息
-    lines.append("## 七、面经与面试准备")
+    interview_intel = output.get("interview_intelligence")
+    
+    lines.append("## 七、面试智能分析")
     lines.append("")
-    lines.append("### 面试流程")
-    lines.append("")
-    lines.append("1. **一面（技术）**：Go基础 + 算法题")
-    lines.append("2. **二面（技术）**：系统设计 + 项目深挖")
-    lines.append("3. **三面（总监/VP）**：技术视野 + 职业规划")
-    lines.append("4. **HR面**：薪资谈判 + 背景调查")
-    lines.append("")
-    lines.append("### 高频考点")
-    lines.append("")
-    lines.append("**Go基础**：")
-    lines.append("- GMP调度模型详解")
-    lines.append("- Goroutine泄漏检测")
-    lines.append("- Channel底层实现（hchan结构）")
-    lines.append("- Context使用场景")
-    lines.append("- defer执行顺序")
-    lines.append("- slice/map底层实现")
-    lines.append("")
-    lines.append("**并发编程**：")
-    lines.append("- sync.Map vs map+mutex")
-    lines.append("- atomic包使用")
-    lines.append("- WaitGroup vs Channel")
-    lines.append("- 并发安全的单例模式")
-    lines.append("")
-    lines.append("**系统设计**：")
-    lines.append("- 设计一个IM系统（微信/QQ）")
-    lines.append("- 设计一个支付系统")
-    lines.append("- 设计一个分布式消息队列")
-    lines.append("- 设计一个缓存系统")
-    lines.append("")
-    lines.append("**网络与协议**：")
-    lines.append("- TCP三次握手/四次挥手")
-    lines.append("- HTTP/2 vs HTTP/3")
-    lines.append("- gRPC原理")
-    lines.append("- WebSocket原理")
-    lines.append("")
-    lines.append("### 薪资参考")
-    lines.append("")
-    lines.append("| 级别 | 薪资范围 |")
-    lines.append("|------|----------|")
-    lines.append("| 应届生 | 25-35K * 16薪 |")
-    lines.append("| 1-3年 | 30-50K * 16薪 |")
-    lines.append("| 3-5年 | 40-70K * 16薪 |")
-    lines.append("| 5年+ | 50-100K * 16薪 |")
-    lines.append("")
-    lines.append("### 准备建议")
+    
+    if interview_intel:
+        # 面试风格
+        styles = interview_intel.get("interview_style", [])
+        if styles:
+            lines.append("### 面试风格")
+            lines.append("")
+            for style in styles:
+                lines.append(f"- {style}")
+            lines.append("")
+        
+        # 算法难度
+        coding_diff = interview_intel.get("coding_difficulty", "")
+        if coding_diff:
+            lines.append(f"### 算法难度：{coding_diff}")
+            lines.append("")
+        
+        # 高频问题
+        top_questions = interview_intel.get("top_questions", [])
+        if top_questions:
+            lines.append("### 高频问题")
+            lines.append("")
+            for i, q in enumerate(top_questions[:5], 1):
+                lines.append(f"{i}. {q}")
+            lines.append("")
+        
+        # 系统设计重点
+        design_focus = interview_intel.get("system_design_focus", [])
+        if design_focus:
+            lines.append("### 系统设计重点")
+            lines.append("")
+            for focus in design_focus:
+                lines.append(f"- {focus}")
+            lines.append("")
+        
+        # 高频技术栈
+        tech_mentioned = interview_intel.get("tech_stack_mentioned", [])
+        if tech_mentioned:
+            lines.append("### 高频技术栈")
+            lines.append("")
+            lines.append(f"- {', '.join(tech_mentioned)}")
+            lines.append("")
+        
+        # 项目深挖
+        project_deep = interview_intel.get("project_deep_dive", False)
+        lines.append(f"### 项目深挖：{'是' if project_deep else '否'}")
+        lines.append("")
+        
+        # 团队类型
+        team_type = interview_intel.get("team_type", "")
+        if team_type:
+            lines.append(f"### 团队类型：{team_type}")
+            lines.append("")
+        
+        # 重复信号
+        signals = interview_intel.get("repeated_signals", [])
+        if signals:
+            lines.append("### 重复信号")
+            lines.append("")
+            for signal in signals:
+                lines.append(f"- {signal}")
+            lines.append("")
+    else:
+        lines.append("暂无面试智能分析数据")
+        lines.append("")
+    
+    lines.append("### 面试准备建议")
     lines.append("")
     lines.append("1. **算法**：刷 LeetCode 250题，重点中等难度")
     lines.append("2. **Go**：深入理解底层原理（GMP、Channel、GC）")
