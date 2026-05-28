@@ -1065,6 +1065,67 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
     lines.append(f"| **综合** | **{overall_score}/10** | **100%** | **{overall_score:.1f}** | |")
     lines.append("")
     
+    # 加减分明细
+    lines.append("### 加减分明细")
+    lines.append("")
+    
+    # WLB 加减分
+    lines.append("**WLB（工作生活平衡）**：基础5分")
+    wlb_signals = []
+    if wlb < 5:
+        wlb_signals.append(f"- 负面信号拉低至 {wlb}分")
+        wlb_signals.append("  - 可能存在：996、加班多、大小周、高强度")
+    elif wlb > 5:
+        wlb_signals.append(f"+ 正面信号提升至 {wlb}分")
+        wlb_signals.append("  - 可能存在：不加班、双休、准时下班、弹性")
+    else:
+        wlb_signals.append("- 无明显正负信号，维持基础分")
+    for signal in wlb_signals:
+        lines.append(signal)
+    lines.append("")
+    
+    # 稳定性加减分
+    lines.append("**稳定性（公司稳定性）**：基础5分")
+    stab_signals = []
+    if stability < 5:
+        stab_signals.append(f"- 负面信号拉低至 {stability}分")
+        stab_signals.append("  - 可能存在：裁员、倒闭、欠薪、收缩")
+    elif stability > 5:
+        stab_signals.append(f"+ 正面信号提升至 {stability}分")
+        stab_signals.append("  - 可能存在：国企、央企、上市、不裁员")
+    else:
+        stab_signals.append("- 无明显正负信号，维持基础分")
+    for signal in stab_signals:
+        lines.append(signal)
+    lines.append("")
+    
+    # 成长性加减分
+    lines.append("**成长性（晋升空间）**：基础5分")
+    grow_signals = []
+    if growth < 5:
+        grow_signals.append(f"- 负面信号拉低至 {growth}分")
+        grow_signals.append("  - 可能存在：增长放缓、停滞、天花板、裁员")
+    elif growth > 5:
+        grow_signals.append(f"+ 正面信号提升至 {growth}分")
+        grow_signals.append("  - 可能存在：增长强劲、晋升快、技术领先")
+    else:
+        grow_signals.append("- 无明显正负信号，维持基础分")
+    for signal in grow_signals:
+        lines.append(signal)
+    lines.append("")
+    
+    # 福利加减分
+    lines.append("**福利（生活福利）**：0-5分")
+    perks_signals = []
+    if perks > 0:
+        perks_signals.append(f"+ 发现福利项目，得分 {perks}分")
+        perks_signals.append("  - 可能存在：免费三餐、下午茶、健身房、班车、房补")
+    else:
+        perks_signals.append("- 未发现明显福利")
+    for signal in perks_signals:
+        lines.append(signal)
+    lines.append("")
+    
     # 风险详情
     if risk_details:
         lines.append("## 二、风险详情")
