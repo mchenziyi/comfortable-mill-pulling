@@ -21,6 +21,28 @@ description: 程序员职场 Intelligence Skill - 专为技术岗位（Go/Java/A
 
 ## 核心能力
 
+### 0. 简历 PDF 解析
+自动从 PDF 简历中提取文本，支持四级回退：
+
+| 优先级 | 方法 | 适用场景 | 依赖 |
+|:--:|------|----------|------|
+| 1 | PyPDF2 | 文字型 PDF | PyPDF2（自动安装） |
+| 2 | pdfplumber | 表格/复杂布局 | pdfplumber（自动安装） |
+| 3 | pymupdf | 中文编码特殊字体 | pymupdf（自动安装） |
+| 4 | OCR | 图片型 PDF | Tesseract + pymupdf + PIL |
+
+**使用方式**：
+```bash
+python <skill_dir>/extract_resume.py <pdf_path>
+```
+
+**自动安装**：脚本会自动检测并安装缺失的 Python 包。
+
+**OCR 说明**（仅图片型 PDF 需要）：
+- 安装 Tesseract：`winget install UB-Mannheim.TesseractOCR`
+- 需要中文语言包：`chi_sim.traineddata`
+- 脚本会自动查找 Tesseract 路径和语言包
+
 ### 1. 公司与岗位风险分析
 - WLB（工作生活平衡）
 - 管理风险
