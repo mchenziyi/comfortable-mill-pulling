@@ -653,36 +653,119 @@ def _match_patterns(text: str, patterns: list[tuple[str, float]]) -> float:
             score += weight
     return score
 
-def analyze_wlb(text: str) -> tuple[float, list[str]]:
+def analyze_wlb(text: str) -> tuple[float, list[str], list[dict]]:
+    """分析 WLB，返回 (delta, tags, detailed_signals)"""
     positive = [
-        (r'不加班', 2.0), (r'准时下班', 1.5), (r'双休', 1.5), (r'弹性[工上]', 1.0),
-        (r'不卷', 1.5), (r'养老', 1.0), (r'轻松', 1.0), (r'wlb[好棒]', 1.5),
-        (r'work\s*life\s*balance', 1.5), (r'朝九晚[五六]', 1.5), (r'偶尔加班', 0.3),
+        (r'不加班', 2.0, '不加班'), (r'准时下班', 1.5, '准时下班'), (r'双休', 1.5, '双休'),
+        (r'弹性[工上]', 1.0, '弹性工作'), (r'不卷', 1.5, '不卷'), (r'养老', 1.0, '养老'),
+        (r'轻松', 1.0, '轻松'), (r'wlb[好棒]', 1.5, 'WLB好'), (r'偶尔加班', 0.3, '偶尔加班'),
     ]
     negative = [
-        (r'996', -2.0), (r'大小周', -1.5), (r'加班[多严]', -1.5), (r'加班[严]重', -2.0),
-        (r'卷$', -1.0), (r'很卷', -1.5), (r'内卷', -1.5), (r'累$', -1.0), (r'很累', -1.5),
-        (r'通宵', -2.0), (r'凌晨', -1.5), (r'11点', -1.0), (r'12点', -1.5),
-        (r'周末[加值]', -1.5), (r'无偿加班', -2.0), (r'强制加班', -2.0),
+        (r'996', -2.0, '996'), (r'大小周', -1.5, '大小周'), (r'加班[多严]', -1.5, '加班多'),
+        (r'加班[严]重', -2.0, '加班严重'), (r'很卷', -1.5, '很卷'), (r'内卷', -1.5, '内卷'),
+        (r'通宵', -2.0, '通宵'), (r'凌晨', -1.5, '凌晨工作'), (r'11点', -1.0, '晚上11点'),
+        (r'周末[加值]', -1.5, '周末加班'), (r'无偿加班', -2.0, '无偿加班'), (r'强制加班', -2.0, '强制加班'),
     ]
-    delta = _match_patterns(text, positive) + _match_patterns(text, negative)
+    
+    detailed_signals = []
+    delta = 0.0
+    for pat, weight, name in positive:
+        if re.search(pat, text):
+            delta += weight
+            detailed_signals.append({'signal': name, 'weight': weight, 'type': 'positive'})
+    for pat, weight, name in negative:
+        if re.search(pat, text):
+            delta += weight
+            detailed_signals.append({'signal': name, 'weight': weight, 'type': 'negative'})
+    
     delta = max(-3.0, min(3.0, delta))
     tags = []
     if re.search(r'996|大小周|加班[多严]|内卷|很卷', text): tags.append("加班重")
     if re.search(r'不加班|双休|不卷|wlb[好棒]|准时下班', text): tags.append("WLB好")
     if re.search(r'偶尔加班', text): tags.append("偶尔加班")
-    return delta, tags
+    return delta, tags, detailed_signals
 
-def analyze_stability(text: str) -> tuple[float, list[str]]:
+def analyze_stability(text: str) -> tuple[float, list[str], list[dict]]:
+    """分析稳定性，返回 (delta, tags, detailed_signals)"""
     positive = [
-        (r'国企', 2.0), (r'央企', 2.5), (r'上市[了公司]', 1.5), (r'不裁员', 2.0),
-        (r'稳定', 1.0), (r'现金流[充沛充裕]', 1.5), (r'不差钱', 1.0), (r'盈利', 1.0), (r'行业龙头', 1.0),
+        (r'国企', 2.0, '国企背景'), (r'央企', 2.5, '央企背景'), (r'上市[了公司]', 1.5, '上市公司'),
+        (r'不裁员', 2.0, '不裁员'), (r'稳定', 1.0, '稳定'), (r'盈利', 1.0, '盈利'),
+        (r'行业龙头', 1.0, '行业龙头'),
     ]
     negative = [
-        (r'裁员', -2.0), (r'倒闭', -3.0), (r'欠薪', -3.0), (r'拖欠', -2.5), (r'爆雷', -3.0),
-        (r'收缩', -1.5), (r'撤出', -2.0), (r'解散', -3.0), (r'亏损', -1.5), (r'关停', -2.5), (r'大幅裁员', -3.0),
+        (r'裁员', -2.0, '裁员'), (r'倒闭', -3.0, '倒闭'), (r'欠薪', -3.0, '欠薪'),
+        (r'拖欠', -2.5, '拖欠'), (r'爆雷', -3.0, '爆雷'), (r'收缩', -1.5, '收缩'),
+        (r'撤出', -2.0, '撤出'), (r'解散', -3.0, '解散'), (r'亏损', -1.5, '亏损'),
     ]
-    delta = _match_patterns(text, positive) + _match_patterns(text, negative)
+    
+    detailed_signals = []
+    delta = 0.0
+    for pat, weight, name in positive:
+        if re.search(pat, text):
+            delta += weight
+            detailed_signals.append({'signal': name, 'weight': weight, 'type': 'positive'})
+    for pat, weight, name in negative:
+        if re.search(pat, text):
+            delta += weight
+            detailed_signals.append({'signal': name, 'weight': weight, 'type': 'negative'})
+    
+    delta = max(-3.0, min(3.0, delta))
+    tags = []
+    if re.search(r'国企|央企', text): tags.append("国企")
+    if re.search(r'裁员|倒闭|欠薪|爆雷', text): tags.append("有风险")
+    return delta, tags, detailed_signals
+
+def analyze_growth(text: str) -> tuple[float, list[str], list[dict]]:
+    """分析成长性，返回 (delta, tags, detailed_signals)"""
+    positive = [
+        (r'增长[强劲快速]', 2.0, '增长强劲'), (r'高速增长', 2.0, '高速增长'),
+        (r'上市[了预期]', 1.5, '上市预期'), (r'融资', 1.0, '融资'),
+        (r'扩张', 1.0, '扩张'), (r'新业务', 1.0, '新业务'),
+        (r'晋升[快空间]', 1.5, '晋升快'), (r'行业领先', 1.0, '行业领先'),
+    ]
+    negative = [
+        (r'增长放缓', -1.5, '增长放缓'), (r'停滞', -2.0, '停滞'),
+        (r'天花板', -1.0, '天花板'), (r'裁员', -1.0, '裁员'),
+        (r'收缩', -1.5, '收缩'), (r'下行', -1.5, '下行'),
+    ]
+    
+    detailed_signals = []
+    delta = 0.0
+    for pat, weight, name in positive:
+        if re.search(pat, text):
+            delta += weight
+            detailed_signals.append({'signal': name, 'weight': weight, 'type': 'positive'})
+    for pat, weight, name in negative:
+        if re.search(pat, text):
+            delta += weight
+            detailed_signals.append({'signal': name, 'weight': weight, 'type': 'negative'})
+    
+    delta = max(-3.0, min(3.0, delta))
+    tags = []
+    if re.search(r'增长|融资|上市', text): tags.append("增长中")
+    return delta, tags, detailed_signals
+
+def analyze_perks(text: str) -> tuple[float, list[str], list[dict]]:
+    """分析福利，返回 (score, tags, detailed_signals)"""
+    perks = [
+        (r'免费[三一]餐', 1.5, '免费三餐'), (r'四餐', 1.0, '包四餐'), (r'包吃', 1.0, '包吃'),
+        (r'食堂', 0.8, '食堂'), (r'下午茶', 1.0, '下午茶'), (r'健身房', 1.0, '健身房'),
+        (r'班车', 0.8, '班车'), (r'零食[饮料无限]', 0.8, '零食'), (r'房补', 1.5, '房补'),
+        (r'餐补', 0.8, '餐补'), (r'体检', 0.5, '体检'), (r'年假\d+天', 1.0, '年假'),
+        (r'团建', 0.3, '团建'), (r'远程[办公工]', 1.5, '远程办公'), (r'外企', 1.0, '外企'),
+    ]
+    
+    detailed_signals = []
+    score = 0.0
+    tags = []
+    for pat, weight, name in perks:
+        if re.search(pat, text):
+            score += weight
+            detailed_signals.append({'signal': name, 'weight': weight, 'type': 'positive'})
+            if name not in tags:
+                tags.append(name)
+    
+    return min(score, 5.0), tags, detailed_signals
     delta = max(-3.0, min(3.0, delta))
     tags = []
     if re.search(r'国企|央企', text): tags.append("国企")
@@ -749,23 +832,27 @@ def analyze_sentiment(snippets: list) -> dict:
     # 合并所有文本（高权重的重复出现以增加影响力）
     all_text = " ".join([w["text"] for w in weighted]).lower()
     
-    result = {"wlb":5.0,"stability":5.0,"growth":5.0,"perks":0.0,"tags":[],"risk_tags":[],"pros":[],"cons":[]}
+    result = {"wlb":5.0,"stability":5.0,"growth":5.0,"perks":0.0,"tags":[],"risk_tags":[],"pros":[],"cons":[],"detailed_signals":{}}
 
-    wlb_delta, wlb_tags = analyze_wlb(all_text)
+    wlb_delta, wlb_tags, wlb_signals = analyze_wlb(all_text)
     result["wlb"] = max(1.0, min(10.0, 5.0 + wlb_delta))
     result["tags"].extend(wlb_tags)
+    result["detailed_signals"]["wlb"] = wlb_signals
 
-    stab_delta, stab_tags = analyze_stability(all_text)
+    stab_delta, stab_tags, stab_signals = analyze_stability(all_text)
     result["stability"] = max(1.0, min(10.0, 5.0 + stab_delta))
     result["tags"].extend(stab_tags)
+    result["detailed_signals"]["stability"] = stab_signals
 
-    grow_delta, grow_tags = analyze_growth(all_text)
+    grow_delta, grow_tags, grow_signals = analyze_growth(all_text)
     result["growth"] = max(1.0, min(10.0, 5.0 + grow_delta))
     result["tags"].extend(grow_tags)
+    result["detailed_signals"]["growth"] = grow_signals
 
-    perks_score, perks_tags = analyze_perks(all_text)
+    perks_score, perks_tags, perks_signals = analyze_perks(all_text)
     result["perks"] = perks_score
     result["tags"].extend(perks_tags)
+    result["detailed_signals"]["perks"] = perks_signals
 
     # 提取风险标签（带证据数量和冲突检测）
     risk_results = extract_risk_tags(all_text)
@@ -882,6 +969,7 @@ async def research_company(page, company: str, department: str = "", position: s
         "exam": exam,
         "jd_analysis": jd_analysis,
         "interview_intelligence": interview_intelligence,
+        "detailed_signals": sentiment.get("detailed_signals", {}),
         "snippets_count": len(all_results),
         "source_distribution": source_counts,
         "confidence": confidence,
@@ -1066,64 +1154,62 @@ def generate_markdown_report(output: dict, skills: dict) -> str:
     lines.append("")
     
     # 加减分明细
+    detailed_signals = output.get("detailed_signals", {})
+    
     lines.append("### 加减分明细")
     lines.append("")
     
     # WLB 加减分
     lines.append("**WLB（工作生活平衡）**：基础5分")
-    wlb_signals = []
-    if wlb < 5:
-        wlb_signals.append(f"- 负面信号拉低至 {wlb}分")
-        wlb_signals.append("  - 可能存在：996、加班多、大小周、高强度")
-    elif wlb > 5:
-        wlb_signals.append(f"+ 正面信号提升至 {wlb}分")
-        wlb_signals.append("  - 可能存在：不加班、双休、准时下班、弹性")
+    wlb_signals = detailed_signals.get("wlb", [])
+    if wlb_signals:
+        for sig in wlb_signals:
+            if sig["type"] == "positive":
+                lines.append(f"  + {sig['signal']}（+{sig['weight']}分）")
+            else:
+                lines.append(f"  - {sig['signal']}（{sig['weight']}分）")
     else:
-        wlb_signals.append("- 无明显正负信号，维持基础分")
-    for signal in wlb_signals:
-        lines.append(signal)
+        lines.append("  - 无明显正负信号")
+    lines.append(f"  = **{wlb}分**")
     lines.append("")
     
     # 稳定性加减分
     lines.append("**稳定性（公司稳定性）**：基础5分")
-    stab_signals = []
-    if stability < 5:
-        stab_signals.append(f"- 负面信号拉低至 {stability}分")
-        stab_signals.append("  - 可能存在：裁员、倒闭、欠薪、收缩")
-    elif stability > 5:
-        stab_signals.append(f"+ 正面信号提升至 {stability}分")
-        stab_signals.append("  - 可能存在：国企、央企、上市、不裁员")
+    stab_signals = detailed_signals.get("stability", [])
+    if stab_signals:
+        for sig in stab_signals:
+            if sig["type"] == "positive":
+                lines.append(f"  + {sig['signal']}（+{sig['weight']}分）")
+            else:
+                lines.append(f"  - {sig['signal']}（{sig['weight']}分）")
     else:
-        stab_signals.append("- 无明显正负信号，维持基础分")
-    for signal in stab_signals:
-        lines.append(signal)
+        lines.append("  - 无明显正负信号")
+    lines.append(f"  = **{stability}分**")
     lines.append("")
     
     # 成长性加减分
     lines.append("**成长性（晋升空间）**：基础5分")
-    grow_signals = []
-    if growth < 5:
-        grow_signals.append(f"- 负面信号拉低至 {growth}分")
-        grow_signals.append("  - 可能存在：增长放缓、停滞、天花板、裁员")
-    elif growth > 5:
-        grow_signals.append(f"+ 正面信号提升至 {growth}分")
-        grow_signals.append("  - 可能存在：增长强劲、晋升快、技术领先")
+    grow_signals = detailed_signals.get("growth", [])
+    if grow_signals:
+        for sig in grow_signals:
+            if sig["type"] == "positive":
+                lines.append(f"  + {sig['signal']}（+{sig['weight']}分）")
+            else:
+                lines.append(f"  - {sig['signal']}（{sig['weight']}分）")
     else:
-        grow_signals.append("- 无明显正负信号，维持基础分")
-    for signal in grow_signals:
-        lines.append(signal)
+        lines.append("  - 无明显正负信号")
+    lines.append(f"  = **{growth}分**")
     lines.append("")
     
     # 福利加减分
     lines.append("**福利（生活福利）**：0-5分")
-    perks_signals = []
-    if perks > 0:
-        perks_signals.append(f"+ 发现福利项目，得分 {perks}分")
-        perks_signals.append("  - 可能存在：免费三餐、下午茶、健身房、班车、房补")
+    perks_signals = detailed_signals.get("perks", [])
+    if perks_signals:
+        for sig in perks_signals:
+            lines.append(f"  + {sig['signal']}（+{sig['weight']}分）")
     else:
-        perks_signals.append("- 未发现明显福利")
-    for signal in perks_signals:
-        lines.append(signal)
+        lines.append("  - 未发现明显福利")
+    lines.append(f"  = **{perks}分**")
     lines.append("")
     
     # 风险详情
