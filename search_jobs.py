@@ -135,11 +135,33 @@ def get_source_weight(url: str, title: str) -> float:
 
 # JD 分析功能
 JD_RISK_KEYWORDS = {
-    "高强度": ["抗压能力", "抗压", "能承受高强度", "能承受压力", "高压环境"],
-    "职责不清": ["owner意识", "主人翁意识", "自驱力", "主动性强", "多线程", "同时处理"],
-    "可能加班": ["快速响应", "响应迅速", "创业心态", "创业公司", "弹性工作", "结果导向"],
-    "画饼": ["期权激励", "未来可期", "快速发展", "成长空间大", "扁平化管理"],
-    "模糊要求": ["有责任心", "团队合作", "沟通能力强", "学习能力强"],
+    "高强度": [
+        "抗压能力", "抗压", "能承受高强度", "能承受压力", "高压环境",
+        "高强度工作", "快节奏", "节奏快", "高负荷", "能加班",
+    ],
+    "职责不清": [
+        "owner意识", "主人翁意识", "自驱力", "主动性强", "多线程", "同时处理",
+        "端到端", "全栈", "什么都做", "身兼数职", "一专多能",
+    ],
+    "可能加班": [
+        "快速响应", "响应迅速", "创业心态", "创业公司", "弹性工作", "结果导向",
+        "随时待命", "oncall", "on-call", "值班", "冲刺", "赶项目",
+    ],
+    "画饼": [
+        "期权激励", "未来可期", "快速发展", "成长空间大", "扁平化管理",
+        "股权激励", "合伙人", "共同成长", "一起奋斗", "改变世界",
+    ],
+    "模糊要求": [
+        "有责任心", "团队合作", "沟通能力强", "学习能力强",
+        "积极主动", "吃苦耐劳", "抗压能力强", "有激情",
+    ],
+    "技术债": [
+        "重构", "技术债", "遗留系统", "老系统", "迁移", "升级改造",
+    ],
+    "不稳定": [
+        "创业阶段", "初创", "Pre-A", "A轮", "B轮", "早期",
+        "业务调整", "组织架构调整", "战略转型",
+    ],
 }
 
 JD_TECH_KEYWORDS = {
@@ -381,13 +403,26 @@ def analyze_interview_content(interview_texts: list[str]) -> dict:
         r'(?:问了|问到|问的|问题)[：:]?\s*([^\n。]{5,50})',
         r'面试题[：:]?\s*([^\n。]{5,50})',
         r'(?:手撕|手写|实现)[：:]?\s*([^\n。]{5,30})',
+        r'(?:考察|考了|考到)[：:]?\s*([^\n。]{5,50})',
+        r'(?:重点|主要|核心)[是问考][：:]?\s*([^\n。]{5,50})',
+        r'(?:算法题|编程题|代码题)[：:]?\s*([^\n。]{5,30})',
+        r'(?:系统设计|架构设计)[：:]?\s*([^\n。]{5,50})',
     ]
     questions = []
     for pat in question_patterns:
         matches = re.findall(pat, all_text)
         for m in matches:
-            if len(m) > 5 and m not in questions:
-                questions.append(m.strip())
+            # 清洗问题
+            q = m.strip()
+            # 去掉太短或太长的
+            if len(q) < 5 or len(q) > 80:
+                continue
+            # 去掉常见的噪音
+            if any(noise in q for noise in ['的', '了', '在', '是', '有', '和', '与']):
+                continue
+            # 去重
+            if q not in questions:
+                questions.append(q)
     
     # 算法难度评估
     algo_hard = ['hard', '很难', '困难', '动态规划', '图论', '回溯', '贪心', 'ACM', '竞赛']
@@ -571,12 +606,38 @@ def extract_risk_tags(text: str) -> list[dict]:
         
         # 如果有负面命中，加入风险列表
         if negative_hits > 0:
+            # 冲突检测：不只是看有没有正面，还要看比例
+            is_controversial = False
+            severity = "low"
+            
+            if positive_hits > 0:
+                # 有正面也有负面
+                ratio = negative_hits / positive_hits if positive_hits > 0 else float('inf')
+                if ratio < 2:
+                    is_controversial = True  # 正反差不多，有争议
+                    severity = "medium"
+                elif ratio < 5:
+                    is_controversial = True  # 负面多一些，但有正面
+                    severity = "medium"
+                else:
+                    is_controversial = False  # 负面远多于正面，明确风险
+                    severity = "high"
+            else:
+                # 只有负面，没有正面
+                if negative_hits >= 5:
+                    severity = "high"
+                elif negative_hits >= 2:
+                    severity = "medium"
+                else:
+                    severity = "low"
+            
             risk_results.append({
                 "dimension": dimension,
                 "label": RISK_LABELS.get(dimension, dimension),
                 "evidence_count": negative_hits,
                 "positive_count": positive_hits,
-                "controversial": negative_hits > 0 and positive_hits > 0,
+                "controversial": is_controversial,
+                "severity": severity,
             })
     
     return risk_results
@@ -607,6 +668,64 @@ def calculate_confidence(results: list, sentiment: dict) -> float:
 
     total = base_score + count_score + source_score + risk_score
     return round(min(total, 1.0), 2)
+
+def generate_salary_negotiation(company: str, research: dict, skills: dict) -> dict:
+    """生成薪资谈判策略"""
+    # 基础薪资范围（根据市场行情）
+    base_ranges = {
+        "应届生": {"min": 20, "max": 35, "typical": 25},
+        "1-3年": {"min": 25, "max": 50, "typical": 35},
+        "3-5年": {"min": 35, "max": 70, "typical": 50},
+        "5年+": {"min": 50, "max": 100, "typical": 65},
+    }
+    
+    # 获取公司薪资信息
+    salary_range = research.get("salary_range")
+    company_salary = None
+    if salary_range:
+        company_salary = {
+            "min": salary_range[0],
+            "max": salary_range[1],
+            "mid": (salary_range[0] + salary_range[1]) / 2
+        }
+    
+    # 生成谈判策略
+    strategies = []
+    
+    # 基于公司风险的谈判点
+    risk_tags = research.get("risk_tags", [])
+    if "WLB风险" in risk_tags:
+        strategies.append("WLB 风险可以作为谈判筹码：可以要求更高的薪资来补偿加班")
+    if "稳定风险" in risk_tags:
+        strategies.append("公司稳定性风险：可以要求更高的签字费或股票来对冲风险")
+    
+    # 基于技能匹配的谈判点
+    tech_match = min(len(skills["languages"])*2 + len(skills["frameworks"]) + len(skills["databases"]), 10)
+    if tech_match >= 8:
+        strategies.append("技术栈高度匹配：可以强调你的技术能力，要求更高的技术溢价")
+    
+    # 基于公司文化的谈判点
+    if research.get("controversial"):
+        strategies.append("公司存在争议信息：可以在面试中确认真实情况，作为谈判依据")
+    
+    # 基于面试表现的谈判点
+    strategies.append("面试表现：如果面试表现好，可以要求更高的薪资")
+    strategies.append("多 offer 对比：如果有多个 offer，可以作为谈判筹码")
+    
+    # 薪资建议
+    salary_advice = {
+        "base_range": base_ranges.get("3-5年", {"min": 35, "max": 70, "typical": 50}),
+        "company_salary": company_salary,
+        "strategies": strategies,
+        "tips": [
+            "先了解公司的薪资结构（底薪+奖金+股票）",
+            "不要第一个报价，让对方先出价",
+            "强调你的价值，而不是你的需求",
+            "准备好 walk away 的底线",
+        ]
+    }
+    
+    return salary_advice
 
 def generate_summary(company: str, department: str, research: dict, scoring: dict) -> str:
     """生成一句话摘要"""
@@ -766,43 +885,6 @@ def analyze_perks(text: str) -> tuple[float, list[str], list[dict]]:
                 tags.append(name)
     
     return min(score, 5.0), tags, detailed_signals
-    delta = max(-3.0, min(3.0, delta))
-    tags = []
-    if re.search(r'国企|央企', text): tags.append("国企")
-    if re.search(r'裁员|倒闭|欠薪|爆雷', text): tags.append("有风险")
-    return delta, tags
-
-def analyze_growth(text: str) -> tuple[float, list[str]]:
-    positive = [
-        (r'增长[强劲快速]', 2.0), (r'高速增长', 2.0), (r'上市[了预期]', 1.5),
-        (r'融资', 1.0), (r'扩张', 1.0), (r'新业务', 1.0), (r'晋升[快空间]', 1.5), (r'行业领先', 1.0),
-    ]
-    negative = [
-        (r'增长放缓', -1.5), (r'停滞', -2.0), (r'天花板', -1.0),
-        (r'裁员', -1.0), (r'收缩', -1.5), (r'下行', -1.5), (r'寒冬', -1.0),
-    ]
-    delta = _match_patterns(text, positive) + _match_patterns(text, negative)
-    delta = max(-3.0, min(3.0, delta))
-    tags = []
-    if re.search(r'增长|融资|上市', text): tags.append("增长中")
-    return delta, tags
-
-def analyze_perks(text: str) -> tuple[float, list[str]]:
-    perks = [
-        (r'免费[三一]餐', 1.5, "免费三餐"), (r'四餐', 1.0, "包四餐"), (r'包吃', 1.0, "包吃"),
-        (r'食堂', 0.8, "食堂"), (r'下午茶', 1.0, "下午茶"), (r'健身房', 1.0, "健身房"),
-        (r'班车', 0.8, "班车"), (r'零食[饮料无限]', 0.8, "零食"), (r'房补', 1.5, "房补"),
-        (r'餐补', 0.8, "餐补"), (r'体检', 0.5, "体检"), (r'年假\d+天', 1.0, None),
-        (r'团建', 0.3, "团建"), (r'远程[办公工]', 1.5, "远程"), (r'外企', 1.0, "外企"),
-    ]
-    score = 0.0
-    tags = []
-    for pat, weight, tag in perks:
-        if re.search(pat, text):
-            score += weight
-            if tag and tag not in tags:
-                tags.append(tag)
-    return min(score, 5.0), tags
 
 def analyze_exam_difficulty(text: str) -> str:
     hard_kw = [r'很难', r'难度大', r'hard', r'手撕', r'hard题', r'困难', r'hard模式',
@@ -886,6 +968,8 @@ async def research_company(page, company: str, department: str = "", position: s
         f"{company} 工作 体验 评价",
         f"{company} 加班 福利 薪资",
         f"{company} 996 WLB",
+        f"{company} 裁员 优化",
+        f"{company} 晋升 发展",
     ]
 
     # 部门级查询（如果指定了部门）
@@ -899,11 +983,16 @@ async def research_company(page, company: str, department: str = "", position: s
     # JD 搜索（如果指定了岗位）
     if position:
         queries.append(f"{company} {position} 招聘 JD")
+        queries.append(f"{company} {position} 薪资 待遇")
     
     # 面经搜索
     queries.append(f"{company} 面经 面试题")
     if position:
         queries.append(f"{company} {position} 面试 面经")
+    
+    # 平台特定搜索
+    queries.append(f"site:nowcoder.com {company} 面经")
+    queries.append(f"site:zhihu.com {company} 工作")
     
     if avoid_exam:
         queries.append(f"{company} 笔试 难度 面试")
@@ -983,6 +1072,20 @@ def score_company(skills: dict, research: dict, avoid_exam: bool) -> dict:
     s["growth"] = research.get("growth",5)
     s["perks"] = research.get("perks",5)
 
+    # 薪资评分（从搜索结果中提取）
+    salary_score = 5  # 默认
+    salary_range = research.get("salary_range")
+    if salary_range:
+        mid = (salary_range[0] + salary_range[1]) / 2
+        if mid >= 50: salary_score = 10
+        elif mid >= 40: salary_score = 9
+        elif mid >= 30: salary_score = 8
+        elif mid >= 25: salary_score = 7
+        elif mid >= 20: salary_score = 6
+        elif mid >= 15: salary_score = 5
+        else: salary_score = 4
+    s["salary"] = salary_score
+
     exam_pen = 0
     if avoid_exam:
         e = research.get("exam","中等")
@@ -990,11 +1093,12 @@ def score_company(skills: dict, research: dict, avoid_exam: bool) -> dict:
         exam_pen = 0 if e=="简单" else (-1 if e=="中等" else -2.5)
 
     total = round(
-        s["tech_match"]*0.30 +
-        s["wlb"]*0.25 +
+        s["tech_match"]*0.25 +
+        s["salary"]*0.25 +
+        s["wlb"]*0.20 +
         s["stability"]*0.15 +
-        s["growth"]*0.10 +
-        s["perks"]*0.20 +
+        s["growth"]*0.05 +
+        s["perks"]*0.10 +
         exam_pen, 1
     )
     return {"scores":s, "total":total, "total_max":10}
