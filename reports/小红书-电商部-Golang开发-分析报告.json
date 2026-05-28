@@ -1,0 +1,64 @@
+﻿{
+  "overall_score": 3.2,
+  "wlb_score": 3.0,
+  "growth_score": 5.0,
+  "stability_score": 5.0,
+  "perks_score": 3.3,
+  "tech_match_score": 10,
+  "risk_tags": [
+    "加班严重",
+    "裁员风险",
+    "晋升慢"
+  ],
+  "tags": [
+    "加班重",
+    "WLB好",
+    "增长中",
+    "房补",
+    "餐补",
+    "外企"
+  ],
+  "summary": "小红书 电商部 不推荐，总分3.2/10，加班较多，需注意：加班严重,裁员风险",
+  "confidence": 1.0,
+  "company": "小红书",
+  "department": "电商部",
+  "position": "Golang开发",
+  "skills_found": {
+    "languages": [
+      "Go"
+    ],
+    "frameworks": [
+      "Gin",
+      "Go-zero",
+      "Go-zero",
+      "Kratos",
+      "gRPC"
+    ],
+    "databases": [
+      "MySQL",
+      "Redis",
+      "Kafka"
+    ],
+    "devops": [
+      "Docker",
+      "K8s",
+      "CI/CD",
+      "etcd",
+      "Consul"
+    ],
+    "yoe": 0
+  },
+  "avoid_exam": true,
+  "exam": "困难",
+  "pros": [],
+  "cons": [],
+  "source_distribution": {
+    "official": 3,
+    "interview": 7,
+    "employee": 12,
+    "news": 4,
+    "unknown": 9
+  },
+  "snippets_count": 35,
+  "timestamp": "2026-05-27T20:39:13.380148"
+}
